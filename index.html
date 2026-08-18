@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spelling Bee — Live Standings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #120F09; --panel: #201A10; --panel-raised: #2C2415;
+    --honey: #EAAE3F; --honey-deep: #C4841F; --honey-pale: #F7DFA2;
+    --chalk: #F8F3E9; --muted: #AC9F86; --line: #3D3320;
+    --strike: #D14A3F; --strike-dim: #4E2C27; --safe: #7BB35F;
+    --display: 'Archivo Black', sans-serif; --serif: 'Fraunces', serif; --ui: 'Inter', sans-serif;
+  }
+  *{ box-sizing: border-box; }
+  html, body{ margin:0; padding:0; background: var(--bg); color: var(--chalk); font-family: var(--ui); width: 100%; min-height: 100vh; }
+  body{ background-image: radial-gradient(circle at 12% 8%, rgba(234,174,63,0.10), transparent 42%), radial-gradient(circle at 88% 18%, rgba(108,147,224,0.06), transparent 40%), radial-gradient(circle at 85% 92%, rgba(234,174,63,0.06), transparent 45%); }
+  #app{ min-height: 100vh; display:flex; flex-direction:column; }
+
+  .topbar{ display:flex; align-items:center; justify-content:space-between; padding: 14px 22px; border-bottom: 1px solid var(--line); background: rgba(0,0,0,0.18); flex-wrap: wrap; gap:12px; }
+  .brand{ display:flex; align-items:center; gap:10px; font-family: var(--serif); font-weight:600; font-style:italic; font-size: 21px; color: var(--honey-pale); letter-spacing: 0.3px; }
+  .brand .hex-mini{ width:17px; height:17px; background:var(--honey); clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%); flex-shrink:0; box-shadow: 0 0 10px rgba(234,174,63,0.5); }
+  .topbar-mid{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .round-pill{ font-family: var(--display); font-weight:400; font-size: clamp(18px, 2.1vw, 26px); color: var(--bg); background: var(--honey); border-radius: 22px; padding: 10px 24px; letter-spacing:0.04em; text-transform:uppercase; box-shadow: 0 0 22px -4px rgba(234,174,63,0.65); }
+  .progress-mini{ display:flex; flex-direction:column; gap:4px; min-width:150px; }
+  .progress-mini .plabel{ font-size:11px; color:var(--muted); font-weight:600; letter-spacing:0.03em; }
+  .progress-wrap{ width:100%; height:7px; background:var(--line); border-radius:6px; overflow:hidden; }
+  .progress-fill{ height:100%; background: linear-gradient(90deg, var(--honey-deep), var(--honey)); transition: width 0.35s ease; }
+  .topbar-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .btn{ font-family: var(--ui); font-weight:600; font-size:13px; color: var(--chalk); background: var(--panel-raised); border: 1px solid var(--line); border-radius: 7px; padding: 9px 14px; cursor:pointer; transition: all 0.15s ease; }
+  .btn:hover{ background: var(--line); }
+  .btn.primary{ background: var(--honey); color: #1A1408; border-color: var(--honey); }
+  .btn.primary:hover{ background: var(--honey-pale); }
+  .btn.danger{ background: transparent; color: var(--strike); border-color: var(--strike-dim); }
+  .btn.danger:hover{ background: rgba(209,74,63,0.14); }
+  .btn.safe{ background: transparent; color: var(--safe); border-color: var(--safe); }
+  .btn.safe:hover{ background: rgba(123,179,95,0.14); }
+  .btn.ghost{ background: transparent; }
+  .btn:disabled{ opacity:0.35; cursor:not-allowed; }
+  .btn-sm{ padding:6px 10px; font-size:12px; border-radius:6px; }
+  .btn.active{ background: var(--honey); color:#1A1408; border-color:var(--honey); }
+  .btn.active.danger-active{ background: var(--strike); color:#1A1408; border-color:var(--strike); }
+
+  .setup-wrap{ flex:1; display:flex; align-items:flex-start; justify-content:center; padding: 40px 20px 80px; }
+  .setup-card{ width: 100%; max-width: 720px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 32px 32px 28px; }
+  .setup-card h1{ font-family: var(--serif); font-weight:700; font-style:italic; font-size: 30px; margin: 0 0 6px; color: var(--honey-pale); }
+  .setup-card p.sub{ color: var(--muted); margin: 0 0 26px; font-size:14px; }
+  .field-row{ margin-bottom: 18px; }
+  .field-row label{ display:block; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom:6px; }
+  .field-row input[type="text"], .field-row input[type="number"], .field-row textarea, .field-row select{ width:100%; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; color: var(--chalk); font-family: var(--ui); font-size:14px; }
+  .field-row textarea{ resize: vertical; min-height: 90px; font-family: 'Inter', monospace; line-height:1.6; }
+  .field-row input:focus, .field-row textarea:focus, .field-row select:focus{ outline: 2px solid var(--honey); outline-offset:1px; }
+  .field-row .hint{ font-size:11.5px; color:var(--muted); margin-top:5px; line-height:1.5; }
+  .team-setup-block{ border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; background: rgba(0,0,0,0.15); display:flex; gap:12px; align-items:flex-start; }
+  .hex-badge{ flex-shrink:0; width:28px; height:28px; background: var(--honey-deep); clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%); display:flex; align-items:center; justify-content:center; font-family: var(--display); font-size:12px; color:#1A1408; }
+  .team-setup-block .hex-badge{ margin-top: 22px; }
+  .team-setup-block .fields{ flex:1; }
+  .setup-footer{ display:flex; gap:10px; margin-top: 22px; align-items:center; flex-wrap:wrap; }
+  .team-list-scroll{ max-height: 480px; overflow-y:auto; padding-right:4px; margin-top: 18px; }
+  .role-btn-stack{ display:flex; flex-direction:column; gap:12px; margin-top: 10px; }
+  .role-btn-stack .btn{ padding:18px; font-size:15px; text-align:left; display:flex; align-items:center; gap:12px; }
+  .role-btn-stack .btn .emoji{ font-size:22px; }
+  .role-btn-stack .btn .label small{ display:block; font-weight:500; font-size:12px; color:var(--muted); margin-top:2px; }
+
+  .stage{ flex:1; display:flex; flex-direction:column; padding: 30px 34px 42px; }
+  .word-banner{ text-align:center; margin: 6px auto 34px; max-width: 920px; width:100%; }
+  .category-tag{ display:inline-block; font-family: var(--ui); font-weight:700; font-size: clamp(15px, 1.8vw, 21px); color: var(--bg); background: var(--honey-pale); padding: 8px 22px; border-radius: 20px; letter-spacing:0.06em; margin-bottom: 14px; text-transform: uppercase; }
+  .word-banner .eyebrow{ font-size:13px; letter-spacing:0.2em; text-transform:uppercase; color: var(--honey); font-weight:700; margin-bottom:12px; }
+  .word-display{ font-family: var(--display); font-size: clamp(40px, 7.5vw, 96px); color: var(--chalk); background: var(--panel); border: 2px solid var(--honey-deep); border-radius: 18px; padding: 24px 32px; letter-spacing: 0.02em; word-break: break-word; box-shadow: 0 0 0 7px rgba(234,174,63,0.07), 0 18px 40px -14px rgba(0,0,0,0.6); }
+  .word-display.pop-in{ animation: wordPop 0.45s cubic-bezier(.22,.85,.32,1.35); }
+  .word-display.placeholder{ color: var(--muted); font-family: var(--serif); font-style:italic; font-size: clamp(22px,4vw,34px); border-style:dashed; box-shadow:none; }
+  @keyframes wordPop{ 0%{ transform:scale(0.92); opacity:0.3; } 100%{ transform:scale(1); opacity:1; } }
+
+  .teams-grid{ flex:1; display:grid; gap: 20px 18px; grid-template-columns: repeat(auto-fit, minmax(var(--card-min, 250px), 1fr)); align-content:start; }
+  .team-card{ position:relative; background: var(--panel); border: 1px solid var(--line); border-left: 5px solid var(--accent, var(--honey)); border-radius: 14px; padding: 18px 18px 16px; display:flex; flex-direction:column; gap:12px; box-shadow: 0 6px 20px -12px rgba(0,0,0,0.6); transition: border-color 0.2s ease, box-shadow 0.2s ease; overflow: visible; }
+  .team-card.on-last-strike{ box-shadow: 0 0 0 2px rgba(209,74,63,0.5), 0 6px 20px -12px rgba(0,0,0,0.6); }
+  .team-card.strike-hit{ animation: cardShake 0.55s ease; box-shadow: 0 0 0 3px var(--strike), 0 0 28px -4px var(--strike); }
+  .team-card.correct-hit{ animation: correctPulse 0.8s ease; box-shadow: 0 0 0 3px var(--safe), 0 0 26px -3px var(--safe); }
+  @keyframes cardShake{ 0%,100%{ transform:translateX(0); } 20%{ transform:translateX(-7px); } 40%{ transform:translateX(7px); } 60%{ transform:translateX(-5px); } 80%{ transform:translateX(5px); } }
+  @keyframes correctPulse{ 0%{ transform:scale(1); } 35%{ transform:scale(1.045); } 100%{ transform:scale(1); } }
+  .correct-badge{ position:absolute; top:-14px; right:-10px; width:36px; height:36px; background:var(--safe); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; color:#0d1a0a; font-weight:900; box-shadow:0 0 18px rgba(123,179,95,0.75); animation: badgePop 1.1s ease forwards; }
+  @keyframes badgePop{ 0%{ transform:scale(0) rotate(-15deg); opacity:0; } 40%{ transform:scale(1.15) rotate(5deg); opacity:1; } 60%{ transform:scale(1) rotate(0); } 100%{ opacity:0; transform:scale(1) translateY(-6px); } }
+
+  .team-card .team-name{ font-family: var(--serif); font-weight:700; font-style:italic; font-size: calc(clamp(21px, 2.7vw, 32px) * var(--scale, 1)); color: var(--accent, var(--honey-pale)); display:flex; align-items:center; gap:9px; overflow-wrap:anywhere; line-height:1.15; }
+  .team-card .team-name .hex-mini{ width: calc(13px * var(--scale,1)); height: calc(13px * var(--scale,1)); background: var(--accent, var(--honey)); flex-shrink:0; clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%); }
+  .speller-label{ font-size:11px; text-transform:uppercase; letter-spacing:0.12em; color: var(--muted); font-weight:600; margin-bottom:2px; }
+  .speller-name{ font-family: var(--display); font-size: calc(clamp(23px, 3.3vw, 36px) * var(--scale, 1)); line-height:1.05; color: var(--chalk); word-break: break-word; }
+  .strikes-row{ display:flex; gap:7px; margin-top:auto; padding-top:4px; flex-wrap:wrap; }
+  .strike-hex{ position: relative; width: calc(27px * var(--scale, 1)); height: calc(27px * var(--scale, 1)); clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%); background: var(--strike-dim); border: 1px solid var(--line); transition: background 0.2s ease, box-shadow 0.2s ease; }
+  .strike-hex.filled{ background: var(--strike); border-color: var(--strike); box-shadow: 0 0 14px -1px rgba(209,74,63,0.9); }
+  .strike-hex.filled::before, .strike-hex.filled::after{ content:""; position:absolute; top:50%; left:50%; width: 62%; height: calc(3px * var(--scale, 1)); background: var(--chalk); border-radius: 2px; }
+  .strike-hex.filled::before{ transform: translate(-50%,-50%) rotate(45deg); }
+  .strike-hex.filled::after{ transform: translate(-50%,-50%) rotate(-45deg); }
+
+  .waiting-screen{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding: 40px; }
+  .waiting-screen .hex-big{ width:64px; height:64px; background:var(--honey-deep); clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%); margin-bottom: 22px; opacity:0.7; }
+  .waiting-screen h2{ font-family: var(--serif); font-style:italic; font-weight:600; color: var(--honey-pale); font-size:26px; margin:0 0 8px; }
+  .waiting-screen p{ color: var(--muted); font-size:14px; max-width:460px; }
+  .waiting-screen code{ background: rgba(0,0,0,0.3); padding:2px 6px; border-radius:5px; }
+
+  .strike-flash{ position:fixed; inset:0; z-index:60; pointer-events:none; display:flex; flex-direction:column; align-items:center; justify-content:center; background: radial-gradient(circle, rgba(209,74,63,0.32), rgba(18,15,9,0.88) 70%); }
+  .strike-flash .flash-label{ font-family: var(--display); font-size: clamp(52px, 11vw, 150px); color: var(--chalk); text-shadow: 0 0 50px rgba(209,74,63,0.95); letter-spacing:0.04em; }
+  .strike-flash .flash-team{ font-family: var(--serif); font-style:italic; font-weight:700; font-size: clamp(30px,5.5vw,68px); color: var(--honey-pale); margin-top:14px; }
+  .strike-flash .flash-remaining{ font-family: var(--ui); font-weight:700; font-size: clamp(16px,2.2vw,23px); color: var(--muted); margin-top:16px; letter-spacing:0.05em; text-transform:uppercase; }
+  .strike-flash .flash-remaining.out{ color: var(--strike); }
+  @keyframes strikeFade{ 0%{ opacity:0; } 8%{ opacity:1; } 78%{ opacity:1; } 100%{ opacity:0; } }
+  @keyframes strikeText{ 0%{ transform:scale(0.7) rotate(-2deg); } 15%{ transform:scale(1.08) rotate(1deg); } 25%{ transform:scale(1) rotate(0); } 100%{ transform:scale(1) rotate(0); } }
+
+  .correct-flash{ position:fixed; top:28px; left:50%; transform:translateX(-50%); z-index:60; pointer-events:none; display:flex; align-items:center; gap:14px; background: rgba(20,17,11,0.92); border:2px solid var(--safe); border-radius:16px; padding:14px 28px; box-shadow: 0 0 40px -6px rgba(123,179,95,0.6); animation: correctToast 1.4s ease forwards; }
+  .correct-flash .cf-check{ width:34px; height:34px; border-radius:50%; background:var(--safe); display:flex; align-items:center; justify-content:center; font-size:20px; color:#0d1a0a; font-weight:900; flex-shrink:0; }
+  .correct-flash .cf-text{ font-family:var(--serif); font-style:italic; font-weight:700; font-size: clamp(18px,2.6vw,26px); color:var(--chalk); }
+  @keyframes correctToast{ 0%{ opacity:0; transform:translate(-50%,-14px); } 12%{ opacity:1; transform:translate(-50%,0); } 82%{ opacity:1; } 100%{ opacity:0; transform:translate(-50%,-6px); } }
+
+  .host-grid{ flex:1; padding: 22px 26px 60px; display:flex; flex-direction:column; gap:20px; max-width: 1020px; margin: 0 auto; width:100%; }
+  .host-section{ background: var(--panel); border:1px solid var(--line); border-radius:12px; padding: 18px 20px; }
+  .host-section h3{ font-family: var(--serif); font-style:italic; font-weight:600; font-size:17px; color: var(--honey-pale); margin: 0 0 14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .host-section h3 .hex-badge{ margin:0; width:24px; height:24px; font-size:11px; }
+  .host-section h3 .sub{ font-family: var(--ui); font-style:normal; font-weight:500; font-size:12px; color:var(--muted); margin-left:auto; }
+  .current-word-row{ display:flex; gap:12px; flex-wrap:wrap; }
+  .current-word-row .field-row{ flex:1; min-width:200px; margin-bottom:0; }
+  .section-divider{ border:none; border-top:1px solid var(--line); margin: 18px 0; }
+  .queue-status{ display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px; color: var(--muted); margin-top:10px; flex-wrap:wrap; }
+  .screen-status-row{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+
+  .round-team-row{ display:flex; align-items:center; gap:12px; padding: 11px 4px; border-bottom: 1px solid var(--line); border-left: 4px solid var(--accent, var(--honey)); border-radius:6px; padding-left:12px; margin-bottom:6px; flex-wrap:wrap; background: rgba(0,0,0,0.1); }
+  .round-team-row.eliminated{ opacity:0.5; }
+  .round-team-row .name-block{ min-width:170px; flex:1; }
+  .round-team-row .name-block .tname{ font-family: var(--serif); font-weight:700; font-style:italic; font-size:16.5px; color: var(--accent, var(--honey-pale)); }
+  .round-team-row .name-block .current{ font-size:12.5px; color: var(--muted); margin-top:2px; }
+  .round-toggle{ display:flex; gap:6px; }
+
+  .teams-score-list{ display:flex; flex-direction:column; gap:6px; }
+  .host-team-row{ display:flex; align-items:center; gap:12px; padding: 10px 12px; border-left: 4px solid var(--accent, var(--honey)); border-radius:6px; background: rgba(0,0,0,0.1); flex-wrap:wrap; }
+  .host-team-row.eliminated{ opacity:0.5; }
+  .host-team-row .name-block{ min-width:170px; flex:1; }
+  .host-team-row .name-block .tname{ font-family: var(--serif); font-weight:700; font-style:italic; font-size:16px; color: var(--accent, var(--honey-pale)); }
+  .host-team-row .name-block .current{ font-size:12.5px; color: var(--muted); margin-top:2px; }
+  .host-team-row .strike-dots{ display:flex; gap:5px; }
+  .host-team-row .strike-dots .dot{ position:relative; width:15px; height:15px; clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%); background: var(--strike-dim); border:1px solid var(--line); }
+  .host-team-row .strike-dots .dot.filled{ background: var(--strike); border-color: var(--strike); }
+  .host-team-row .strike-dots .dot.filled::before, .host-team-row .strike-dots .dot.filled::after{ content:""; position:absolute; top:50%; left:50%; width:60%; height:2px; background: var(--chalk); border-radius:2px; }
+  .host-team-row .strike-dots .dot.filled::before{ transform: translate(-50%,-50%) rotate(45deg); }
+  .host-team-row .strike-dots .dot.filled::after{ transform: translate(-50%,-50%) rotate(-45deg); }
+  .host-team-row .actions{ display:flex; gap:6px; }
+
+  .empty-note{ color: var(--muted); font-size: 14px; text-align:center; padding: 30px 0; }
+  .link-callout{ display:flex; align-items:center; gap:10px; background: rgba(234,174,63,0.08); border: 1px dashed var(--honey-deep); border-radius: 10px; padding: 12px 14px; font-size:13px; color: var(--honey-pale); flex-wrap:wrap; }
+  .link-callout code{ background: rgba(0,0,0,0.3); padding:2px 6px; border-radius:5px; font-size:12px; color: var(--chalk); word-break:break-all; }
+  .sync-badge{ font-size:11px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; padding:4px 10px; border-radius:12px; }
+  .sync-badge.cloud{ background: rgba(123,179,95,0.15); color: var(--safe); border:1px solid var(--safe); }
+  .sync-badge.local{ background: rgba(172,159,134,0.15); color: var(--muted); border:1px solid var(--line); }
+
+  .winner-overlay{ position:fixed; inset:0; background: rgba(10,8,4,0.92); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; z-index: 50; padding:20px; }
+  .winner-overlay .hex-big{ width:90px; height:90px; background:var(--honey); clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%); margin-bottom: 20px; box-shadow: 0 0 60px rgba(234,174,63,0.5); }
+  .winner-overlay .eyebrow{ color: var(--honey); letter-spacing:0.2em; text-transform:uppercase; font-size:14px; font-weight:700; margin-bottom:10px;}
+  .winner-overlay h2{ font-family: var(--display); font-size: clamp(40px, 9vw, 110px); margin: 0 0 10px; color: var(--chalk); }
+  .winner-overlay p{ color: var(--muted); font-size:15px; margin-bottom: 26px; }
+
+  @media (max-width: 640px){ .topbar{ padding: 12px 14px; } .stage{ padding: 20px 16px 30px; } .word-display{ padding: 16px 18px; } .host-grid{ padding: 16px 14px 40px; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const ROOM_PARAM = "room";
+  let roomId = urlParams.get(ROOM_PARAM) || null;
+
+  const hasCloudStorage = (typeof window.storage !== "undefined") && window.storage && typeof window.storage.get === "function";
+  const bcFallback = ("BroadcastChannel" in window) ? new BroadcastChannel("spelling-bee-fallback-v5") : null;
+
+  // ==========================================================================================
+  // FIREBASE SETUP — paste your Realtime Database URL below (see instructions in the chat).
+  // It looks like: "https://your-project-id-default-rtdb.firebaseio.com"
+  // Leave the placeholder in place if you haven't set this up yet — the app still works fine
+  // on one laptop via same-device sync, it just won't sync across separate laptops.
+  // ==========================================================================================
+  const FIREBASE_DB_URL = "https://scott-s-spelling-bee-default-rtdb.firebaseio.com";
+
+  function firebaseConfigured(){ return typeof FIREBASE_DB_URL === "string" && FIREBASE_DB_URL.indexOf("https://") === 0; }
+
+  function ensureRoom(){
+    if(hasCloudStorage) return;
+    if(!firebaseConfigured()) return;
+    if(roomId) return;
+    roomId = uid() + uid();
+    let url = new URL(window.location.href);
+    url.searchParams.set(ROOM_PARAM, roomId);
+    history.replaceState(null, "", url.toString());
+  }
+
+  // Realtime Database is a tree, not flat key/value — votes live under their own node
+  // (rooms/{room}/votes/{teamId}) so we can fetch them all in one request; everything
+  // else lives at rooms/{room}/{key}.
+  function firebaseUrlFor(key){
+    if(key.indexOf("vote:") === 0){ return `${FIREBASE_DB_URL}/rooms/${roomId}/votes/${encodeURIComponent(key.slice(5))}.json`; }
+    return `${FIREBASE_DB_URL}/rooms/${roomId}/${encodeURIComponent(key)}.json`;
+  }
+
+  // ---------------- Unified shared-state storage (window.storage → Firebase room → same-device local fallback) ----------------
+  async function sharedGet(key){
+    try{
+      if(hasCloudStorage){ let r = await window.storage.get(key, true); return r ? r.value : null; }
+      if(firebaseConfigured() && roomId){
+        let res = await fetch(firebaseUrlFor(key));
+        if(!res.ok) return null;
+        let data = await res.json();
+        return (data === null || data === undefined) ? null : data;
+      }
+    }catch(e){}
+    try{ return localStorage.getItem("shared:" + key); }catch(e){ return null; }
+  }
+  async function sharedSet(key, value){
+    try{
+      if(hasCloudStorage){ await window.storage.set(key, value, true); return; }
+      if(firebaseConfigured() && roomId){
+        await fetch(firebaseUrlFor(key), { method: "PUT", body: JSON.stringify(value) });
+        return;
+      }
+    }catch(e){}
+    try{ localStorage.setItem("shared:" + key, value); if(bcFallback) bcFallback.postMessage({ping:true}); }catch(e){}
+  }
+  async function sharedDelete(key){
+    try{
+      if(hasCloudStorage){ await window.storage.delete(key, true); return; }
+      if(firebaseConfigured() && roomId){ await fetch(firebaseUrlFor(key), { method: "DELETE" }); return; }
+    }catch(e){}
+    try{ localStorage.removeItem("shared:" + key); }catch(e){}
+  }
+  // returns { teamId: rawVoteJsonString, ... } for every vote currently recorded — one request, not N
+  async function sharedGetAllVotes(){
+    try{
+      if(hasCloudStorage){
+        let r = await window.storage.list("vote:", true);
+        let ids = (r && r.keys) ? r.keys.map(k => k.slice(5)) : [];
+        let entries = await Promise.all(ids.map(async id => [id, await sharedGet("vote:" + id)]));
+        let map = {}; entries.forEach(([id, raw]) => { if(raw) map[id] = raw; });
+        return map;
+      }
+      if(firebaseConfigured() && roomId){
+        let res = await fetch(`${FIREBASE_DB_URL}/rooms/${roomId}/votes.json`);
+        if(!res.ok) return {};
+        let data = await res.json();
+        return data || {};
+      }
+    }catch(e){}
+    try{
+      let map = {}; let pfx = "shared:vote:";
+      for(let i=0;i<localStorage.length;i++){ let k = localStorage.key(i); if(k && k.indexOf(pfx) === 0){ map[k.slice(pfx.length)] = localStorage.getItem(k); } }
+      return map;
+    }catch(e){ return {}; }
+  }
+
+  function syncStatus(){
+    if(hasCloudStorage) return { cls: "cloud", text: "Cloud sync on" };
+    if(firebaseConfigured() && roomId) return { cls: "cloud", text: "Server sync on" };
+    if(!firebaseConfigured()) return { cls: "local", text: "Firebase not configured — same-device only" };
+    return { cls: "local", text: "Same-device sync only" };
+  }
+
+  // ---------------- Constants / helpers ----------------
+  const TEAM_COLORS = ["#EAAE3F","#4FC3B0","#E2617D","#6C93E0","#B08BEF","#7FC15E","#E08A4F","#54BFE0"];
+  function teamColor(index){ return TEAM_COLORS[index % TEAM_COLORS.length]; }
+  function uid(){ return Math.random().toString(36).slice(2, 9); }
+  function escapeHtml(str){ return String(str).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+  function escapeAttr(str){ return escapeHtml(str); }
+  function cardAccent(t, i){ if(!t.eliminated && (state.strikeLimit - t.strikes) === 1) return "var(--strike)"; return teamColor(i); }
+
+  let lastSeenStrikeEventId = null;
+  let lastSeenCorrectEventId = null;
+  let lastWordAnimKey = null;
+
+  // ---------------- Role + state ----------------
+  let myRole = null;
+  let myTeamIds = [];
+  let pendingJudgePicks = []; // survives poll-triggered re-renders while the judge is still ticking boxes
+  let myLastVotes = {};
+
+  let state = {
+    mode: "setup",
+    strikeLimit: 3,
+    teams: [],
+    round: 1,
+    word: "",
+    category: "",
+    wordQueue: [],
+    queueIndex: 0,
+    roundResults: {},
+    lastSnapshot: null,
+    strikeEvent: null,
+    correctEvent: null,
+    screen: "intro"   // 'intro' (category + who's up, word hidden) | 'word' (word revealed)
+  };
+
+  let setupDraft = {
+    teamCount: 4, strikeLimit: 3,
+    teams: [ { name:"", members:"" }, { name:"", members:"" }, { name:"", members:"" }, { name:"", members:"" } ]
+  };
+
+  const app = document.getElementById("app");
+
+  function render(){
+    if(myRole === "host") return state.mode === "setup" ? renderSetup() : renderHost();
+    if(myRole === "projector") return renderDisplay();
+    if(myRole === "judge") return renderJudge();
+    return renderRolePicker();
+  }
+
+  function saveGameConfig(){ sharedSet("gameConfig", JSON.stringify(state)); }
+  async function refreshRemoteState(){
+    let raw = await sharedGet("gameConfig");
+    if(raw){ try{ let parsed = JSON.parse(raw); state = Object.assign({}, state, parsed); }catch(e){} }
+  }
+
+  // Role and judge-team-assignment are kept per BROWSER TAB (sessionStorage) — lets one laptop
+  // run host in one tab and projector / several judges in other tabs at the same time.
+  function getMyRole(){ try{ return sessionStorage.getItem("beeMyRole_v1"); }catch(e){ return null; } }
+  function setMyRole(role){ try{ sessionStorage.setItem("beeMyRole_v1", role); }catch(e){} }
+  function clearMyRole(){ try{ sessionStorage.removeItem("beeMyRole_v1"); }catch(e){} }
+  function getMyTeamIds(){ try{ let raw = sessionStorage.getItem("beeMyTeamIds_v1"); return raw ? JSON.parse(raw) : []; }catch(e){ return []; } }
+  function setMyTeamIds(ids){ try{ sessionStorage.setItem("beeMyTeamIds_v1", JSON.stringify(ids)); }catch(e){} }
+  function clearMyTeamIds(){ try{ sessionStorage.removeItem("beeMyTeamIds_v1"); }catch(e){} }
+
+  // ---------------- Init ----------------
+  (async function init(){
+    let urlRole = urlParams.get("view");
+    if(urlRole === "host" || urlRole === "projector" || urlRole === "judge"){ myRole = urlRole; }
+    else { myRole = getMyRole(); }
+
+    if(myRole === "judge"){ myTeamIds = getMyTeamIds(); }
+
+    if(myRole === "host"){
+      ensureRoom();
+      let raw = await sharedGet("gameConfig");
+      if(raw){ try{ state = Object.assign(state, JSON.parse(raw)); state.mode = "host"; }catch(e){ state.mode = "setup"; } }
+      else { state.mode = "setup"; }
+      render();
+      setInterval(pollVotes, 1000);
+    } else if(myRole === "projector" || myRole === "judge"){
+      await refreshRemoteState();
+      render();
+      setInterval(async () => { await refreshRemoteState(); render(); }, 1000);
+    } else {
+      render();
+    }
+
+    if(!hasCloudStorage && bcFallback){
+      bcFallback.onmessage = async () => {
+        if(myRole === "projector" || myRole === "judge"){ await refreshRemoteState(); render(); }
+      };
+    }
+  })();
+
+  function chooseRole(role){ myRole = role; setMyRole(role); location.reload(); }
+  function bindSwitchRole(){
+    let el = document.getElementById("switch-role");
+    if(el) el.addEventListener("click", () => { clearMyRole(); clearMyTeamIds(); location.reload(); });
+  }
+
+  function baseShareUrl(){ let url = new URL(window.location.origin + window.location.pathname); if(roomId){ url.searchParams.set(ROOM_PARAM, roomId); } return url.toString(); }
+  function projectorUrl(){ let url = new URL(window.location.href); url.searchParams.set("view", "projector"); return url.toString(); }
+  function judgeUrl(){ let url = new URL(window.location.href); url.searchParams.set("view", "judge"); return url.toString(); }
+
+  function renderMissingRoom(label){
+    let body = firebaseConfigured()
+      ? `<h2>This link is missing its room code</h2><p>Ask your host for the full link — it should end with something like <code>?room=abc123</code>. Opening the site's plain address won't connect you to their game.</p>`
+      : `<h2>Server sync isn't set up yet</h2><p>The host needs to add a Firebase database URL to this file and re-upload it before other laptops can connect. Until then this only works with tabs on the host's own laptop.</p>`;
+    app.innerHTML = `
+      <div class="topbar"><div class="brand"><div class="hex-mini"></div> Spelling Bee — ${label}</div></div>
+      <div class="waiting-screen"><div class="hex-big"></div>${body}</div>
+    `;
+  }
+
+  // ---------------- Role picker ----------------
+  function renderRolePicker(){
+    app.innerHTML = `
+      <div class="topbar"><div class="brand"><div class="hex-mini"></div> Spelling Bee</div></div>
+      <div class="setup-wrap">
+        <div class="setup-card">
+          <h1>Who's this device for?</h1>
+          <p class="sub">Pick a role — this tab remembers it next time you open this link.</p>
+          <div class="role-btn-stack">
+            <button class="btn primary" id="role-host"><span class="emoji">🖥️</span><span class="label">Run the bee<small>Host controls — set up teams, words, and rounds</small></span></button>
+            <button class="btn" id="role-projector"><span class="emoji">📽️</span><span class="label">Projector display<small>Big screen for the audience — no controls</small></span></button>
+            <button class="btn" id="role-judge"><span class="emoji">🧑‍⚖️</span><span class="label">I'm judging a team<small>Mark correct / incorrect for the team(s) you're assigned</small></span></button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.getElementById("role-host").addEventListener("click", () => chooseRole("host"));
+    document.getElementById("role-projector").addEventListener("click", () => chooseRole("projector"));
+    document.getElementById("role-judge").addEventListener("click", () => chooseRole("judge"));
+  }
+
+  // ---------------- Setup screen (host) ----------------
+  function renderSetup(){
+    syncDraftCount();
+    let teamBlocks = setupDraft.teams.map((t, i) => `
+      <div class="team-setup-block">
+        <div class="hex-badge">${i+1}</div>
+        <div class="fields">
+          <div class="field-row" style="margin-bottom:10px;">
+            <label>Team ${i+1} name</label>
+            <input type="text" data-role="team-name" data-idx="${i}" value="${escapeAttr(t.name)}" placeholder="e.g. The Silent Letters" />
+          </div>
+          <div class="field-row" style="margin-bottom:0;">
+            <label>Members (in spelling order, separated by commas)</label>
+            <input type="text" data-role="team-members" data-idx="${i}" value="${escapeAttr(t.members)}" placeholder="e.g. Amara, Levi, Priya, Noah" />
+          </div>
+        </div>
+      </div>
+    `).join("");
+
+    app.innerHTML = `
+      <div class="topbar"><div class="brand"><div class="hex-mini"></div> Spelling Bee</div></div>
+      <div class="setup-wrap">
+        <div class="setup-card">
+          <h1>Set up the bee</h1>
+          <p class="sub">Enter each team's name and members. Every round, all teams spell the same word at once — after each round, every team rotates to their next speller together.</p>
+          <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:6px;">
+            <div class="field-row" style="flex:1; min-width:160px;">
+              <label>Number of teams</label>
+              <input type="number" id="team-count" min="1" max="20" value="${setupDraft.teamCount}" />
+            </div>
+            <div class="field-row" style="flex:1; min-width:160px;">
+              <label>Strikes before elimination</label>
+              <select id="strike-limit">
+                <option value="2" ${setupDraft.strikeLimit===2?"selected":""}>2 strikes</option>
+                <option value="3" ${setupDraft.strikeLimit===3?"selected":""}>3 strikes</option>
+                <option value="4" ${setupDraft.strikeLimit===4?"selected":""}>4 strikes</option>
+                <option value="5" ${setupDraft.strikeLimit===5?"selected":""}>5 strikes</option>
+              </select>
+            </div>
+          </div>
+          <div class="team-list-scroll">${teamBlocks}</div>
+          <div class="setup-footer">
+            <button class="btn primary" id="start-btn">Start the bee →</button>
+            <span class="hint" id="setup-error" style="color:var(--strike);"></span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById("team-count").addEventListener("change", (e) => {
+      let n = Math.max(1, Math.min(20, parseInt(e.target.value) || 1));
+      setupDraft.teamCount = n; render();
+    });
+    document.getElementById("strike-limit").addEventListener("change", (e) => { setupDraft.strikeLimit = parseInt(e.target.value); });
+    document.querySelectorAll('[data-role="team-name"]').forEach(inp => { inp.addEventListener("input", (e) => { setupDraft.teams[parseInt(e.target.dataset.idx)].name = e.target.value; }); });
+    document.querySelectorAll('[data-role="team-members"]').forEach(inp => { inp.addEventListener("input", (e) => { setupDraft.teams[parseInt(e.target.dataset.idx)].members = e.target.value; }); });
+    document.getElementById("start-btn").addEventListener("click", startBee);
+  }
+
+  function syncDraftCount(){
+    while(setupDraft.teams.length < setupDraft.teamCount){ setupDraft.teams.push({ name:"", members:"" }); }
+    while(setupDraft.teams.length > setupDraft.teamCount){ setupDraft.teams.pop(); }
+  }
+
+  function startBee(){
+    let errEl = document.getElementById("setup-error");
+    let teams = [];
+    for(let i=0;i<setupDraft.teams.length;i++){
+      let t = setupDraft.teams[i];
+      let name = (t.name || `Team ${i+1}`).trim();
+      let members = t.members.split(",").map(s => s.trim()).filter(Boolean);
+      if(members.length === 0){ errEl.textContent = `Team ${i+1} needs at least one member.`; return; }
+      teams.push({ id: uid(), name, members, turn: 0, strikes: 0, eliminated: false });
+    }
+    state.teams = teams;
+    state.strikeLimit = setupDraft.strikeLimit;
+    state.round = 1; state.word = ""; state.category = "";
+    state.wordQueue = []; state.queueIndex = 0; state.roundResults = {};
+    state.lastSnapshot = null; state.strikeEvent = null; state.correctEvent = null; state.screen = "intro";
+    state.mode = "host";
+    saveGameConfig(); render();
+  }
+
+  // ---------------- Shared helpers ----------------
+  function currentSpeller(team){ if(team.members.length === 0) return ""; return team.members[team.turn % team.members.length]; }
+  function activeTeams(){ return state.teams.filter(t => !t.eliminated); }
+  function teamScale(count){ if(count <= 6) return 1; if(count <= 10) return 0.85; if(count <= 14) return 0.72; return 0.6; }
+  function cardMin(count){ if(count <= 6) return "250px"; if(count <= 10) return "205px"; if(count <= 14) return "175px"; return "150px"; }
+
+  // ---------------- Word list ----------------
+  function parseWordList(text){
+    let lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+    let currentCat = ""; let list = [];
+    lines.forEach(line => {
+      let idx = line.indexOf(":");
+      if(idx > -1){
+        let left = line.slice(0, idx).trim(); let right = line.slice(idx + 1).trim();
+        if(right === ""){ currentCat = left; } else { currentCat = left; list.push({ category:left, word:right }); }
+      } else { list.push({ category: currentCat, word: line }); }
+    });
+    return list;
+  }
+  function loadWordList(text){
+    let list = parseWordList(text);
+    state.wordQueue = list; state.queueIndex = 0;
+    if(!state.word.trim() && list.length){ state.word = list[0].word; state.category = list[0].category || ""; state.queueIndex = 1; }
+    saveGameConfig(); render();
+  }
+  function clearWordList(){ state.wordQueue = []; state.queueIndex = 0; saveGameConfig(); render(); }
+  function skipToNextQueuedWord(){
+    if(state.queueIndex < state.wordQueue.length){
+      let item = state.wordQueue[state.queueIndex];
+      state.word = item.word; state.category = item.category || ""; state.queueIndex += 1;
+      saveGameConfig(); render();
+    }
+  }
+
+  // ---------------- Screen control (host) ----------------
+  function revealWord(){ if(!state.word.trim()) return; state.screen = "word"; saveGameConfig(); render(); }
+  function showIntroScreen(){ state.screen = "intro"; saveGameConfig(); render(); }
+
+  // ---------------- Round / strike / correct logic (host only) ----------------
+  function fireStrikeEvent(team){
+    state.strikeEvent = { id: uid(), teamId: team.id, teamName: team.name, eliminated: team.eliminated, remaining: Math.max(0, state.strikeLimit - team.strikes) };
+  }
+  function fireCorrectEvent(team){ state.correctEvent = { id: uid(), teamId: team.id, teamName: team.name }; }
+
+  function hostSetResult(teamId, value){
+    let t = state.teams.find(x => x.id === teamId);
+    if(!t) return;
+    let prev = state.roundResults[teamId];
+    if(prev === value){
+      if(prev === "incorrect"){ t.strikes = Math.max(0, t.strikes - 1); t.eliminated = t.strikes >= state.strikeLimit; }
+      delete state.roundResults[teamId];
+      saveGameConfig(); render();
+      return;
+    }
+    if(prev === "incorrect"){ t.strikes = Math.max(0, t.strikes - 1); t.eliminated = t.strikes >= state.strikeLimit; }
+    if(value === "incorrect"){ t.strikes += 1; if(t.strikes >= state.strikeLimit) t.eliminated = true; fireStrikeEvent(t); }
+    if(value === "correct"){ fireCorrectEvent(t); }
+    state.roundResults[teamId] = value;
+    saveGameConfig(); render();
+  }
+
+  function applyExternalResult(teamId, value){
+    let t = state.teams.find(x => x.id === teamId);
+    if(!t || t.eliminated) return;
+    let prev = state.roundResults[teamId];
+    if(prev === value) return;
+    if(prev === "incorrect" && value !== "incorrect"){ t.strikes = Math.max(0, t.strikes - 1); t.eliminated = t.strikes >= state.strikeLimit; }
+    if(value === "incorrect" && prev !== "incorrect"){ t.strikes += 1; if(t.strikes >= state.strikeLimit) t.eliminated = true; fireStrikeEvent(t); }
+    if(value === "correct" && prev !== "correct"){ fireCorrectEvent(t); }
+    state.roundResults[teamId] = value;
+    saveGameConfig(); render();
+  }
+
+  let pollInFlight = false;
+  async function pollVotes(){
+    if(myRole !== "host" || state.mode !== "host") return;
+    if(pollInFlight) return;
+    let active = activeTeams();
+    if(active.length === 0) return;
+    if(active.every(t => state.roundResults[t.id])) return;
+    pollInFlight = true;
+    try{
+      let votes = await sharedGetAllVotes();
+      Object.keys(votes).forEach(teamId => {
+        let t = state.teams.find(x => x.id === teamId);
+        if(!t || t.eliminated) return;
+        let raw = votes[teamId];
+        if(!raw) return;
+        let parsed; try{ parsed = JSON.parse(raw); }catch(e){ return; }
+        if(parsed.round !== state.round) return;
+        applyExternalResult(teamId, parsed.value);
+      });
+    } finally { pollInFlight = false; }
+  }
+
+  function markAllCorrect(){ activeTeams().forEach(t => { hostSetResult(t.id, "correct"); }); }
+  function allActiveMarked(){ let active = activeTeams(); if(active.length === 0) return false; return active.every(t => state.roundResults[t.id]); }
+
+  function nextRound(){
+    state.lastSnapshot = JSON.parse(JSON.stringify({ teams: state.teams, round: state.round, word: state.word, category: state.category, queueIndex: state.queueIndex, screen: state.screen }));
+    state.teams.forEach(t => { if(t.eliminated) return; t.turn = (t.turn + 1) % t.members.length; });
+    state.round += 1;
+    state.roundResults = {};
+    state.screen = "intro";
+    if(state.wordQueue.length > 0 && state.queueIndex < state.wordQueue.length){
+      let item = state.wordQueue[state.queueIndex];
+      state.word = item.word; state.category = item.category || ""; state.queueIndex += 1;
+    } else { state.word = ""; state.category = ""; }
+    saveGameConfig(); render();
+  }
+  function undoLastRound(){
+    if(!state.lastSnapshot) return;
+    state.teams = state.lastSnapshot.teams; state.round = state.lastSnapshot.round;
+    state.word = state.lastSnapshot.word; state.category = state.lastSnapshot.category;
+    state.queueIndex = state.lastSnapshot.queueIndex; state.screen = state.lastSnapshot.screen || "word";
+    state.roundResults = {}; state.lastSnapshot = null;
+    saveGameConfig(); render();
+  }
+  function adjustStrike(teamId, delta){
+    let t = state.teams.find(x => x.id === teamId);
+    if(!t) return;
+    t.strikes = Math.max(0, t.strikes + delta);
+    t.eliminated = t.strikes >= state.strikeLimit;
+    if(delta > 0) fireStrikeEvent(t);
+    saveGameConfig(); render();
+  }
+  function toggleEliminated(teamId){
+    let t = state.teams.find(x => x.id === teamId);
+    if(!t) return;
+    t.eliminated = !t.eliminated;
+    saveGameConfig(); render();
+  }
+
+  // ---------------- Judge actions ----------------
+  function confirmJudgeTeams(selectedIds){ myTeamIds = selectedIds; setMyTeamIds(selectedIds); render(); }
+  function changeTeams(){ myTeamIds = []; clearMyTeamIds(); render(); }
+  async function submitVote(teamId, value){
+    myLastVotes[teamId] = { round: state.round, value };
+    render();
+    await sharedSet("vote:" + teamId, JSON.stringify({ round: state.round, value }));
+  }
+
+  // ---------------- Shared card builder (projector) ----------------
+  function buildTeamCards(aliveList, scale, isNewStrike, isNewCorrect, isIntro){
+    return aliveList.map(({t, i}) => {
+      let accent = cardAccent(t, i);
+      let warn = accent === "var(--strike)";
+      let strikeHexes = ""; for(let s=0;s<state.strikeLimit;s++){ strikeHexes += `<div class="strike-hex ${s < t.strikes ? 'filled':''}"></div>`; }
+      let hitClass = (isNewStrike && state.strikeEvent.teamId === t.id) ? "strike-hit" : (isNewCorrect && state.correctEvent.teamId === t.id ? "correct-hit" : "");
+      let badge = (isNewCorrect && state.correctEvent.teamId === t.id) ? `<div class="correct-badge">✓</div>` : "";
+      let label = isIntro ? "Up next" : "Now spelling";
+      return `
+        <div class="team-card ${hitClass} ${warn ? 'on-last-strike' : ''}" data-team-id="${t.id}" style="--scale:${scale}; --accent:${accent};">
+          ${badge}
+          <div class="team-name"><div class="hex-mini"></div> ${escapeHtml(t.name)}</div>
+          <div><div class="speller-label">${label}</div><div class="speller-name">${escapeHtml(currentSpeller(t))}</div></div>
+          <div class="strikes-row">${strikeHexes}</div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  // ---------------- Display (projector) ----------------
+  function renderDisplay(){
+    if(!hasCloudStorage && !roomId){ renderMissingRoom("Projector"); return; }
+    if(!state.teams || state.teams.length === 0){
+      app.innerHTML = `
+        <div class="topbar"><div class="brand"><div class="hex-mini"></div> Spelling Bee</div></div>
+        <div class="waiting-screen"><div class="hex-big"></div><h2>Waiting for the host to start the bee…</h2><p>This screen updates automatically once teams are set up.</p></div>
+      `;
+      return;
+    }
+
+    let isNewStrike = state.strikeEvent && state.strikeEvent.id !== lastSeenStrikeEventId;
+    let isNewCorrect = state.correctEvent && state.correctEvent.id !== lastSeenCorrectEventId;
+
+    let alive = activeTeams();
+    let aliveList = state.teams.map((t, i) => ({t, i})).filter(x => !x.t.eliminated);
+    let winnerBanner = "";
+    if(state.teams.length > 1 && alive.length === 1){
+      winnerBanner = `<div class="winner-overlay"><div class="hex-big"></div><div class="eyebrow">We have a winner</div><h2>${escapeHtml(alive[0].name)}</h2><p>Every other team has been eliminated.</p></div>`;
+    }
+
+    let scale = teamScale(aliveList.length);
+    let minWidth = cardMin(aliveList.length);
+    let cardsHtml = buildTeamCards(aliveList, scale, isNewStrike, isNewCorrect, state.screen === "intro");
+
+    if(state.screen === "intro"){
+      app.innerHTML = `
+        <div class="topbar">
+          <div class="brand"><div class="hex-mini"></div> Spelling Bee</div>
+          <div class="topbar-mid"><div class="round-pill">Round ${state.round}</div></div>
+        </div>
+        <div class="stage">
+          <div class="word-banner">
+            ${state.category.trim() ? `<div class="category-tag">${escapeHtml(state.category)}</div><br/>` : ""}
+            <div class="eyebrow">${state.category.trim() ? "Next category" : "Get ready"}</div>
+            <div class="word-display placeholder">Word coming up…</div>
+          </div>
+          <div class="teams-grid" style="--card-min:${minWidth};">${cardsHtml || `<div class="empty-note">No teams remaining.</div>`}</div>
+        </div>
+        ${winnerBanner}
+      `;
+    } else {
+      let animKey = state.round + "::" + state.word;
+      let isNewWord = animKey !== lastWordAnimKey;
+      lastWordAnimKey = animKey;
+      let active = activeTeams();
+      let markedCount = active.filter(t => state.roundResults[t.id]).length;
+      let showProgress = state.word.trim() && active.length > 0;
+
+      app.innerHTML = `
+        <div class="topbar">
+          <div class="brand"><div class="hex-mini"></div> Spelling Bee</div>
+          <div class="topbar-mid">
+            <div class="round-pill">Round ${state.round}</div>
+            ${showProgress ? `<div class="progress-mini"><div class="plabel">${markedCount} of ${active.length} results in</div><div class="progress-wrap"><div class="progress-fill" style="width:${active.length ? (markedCount/active.length*100) : 0}%"></div></div></div>` : ""}
+          </div>
+        </div>
+        <div class="stage">
+          <div class="word-banner">
+            ${state.category.trim() ? `<div class="category-tag">${escapeHtml(state.category)}</div><br/>` : ""}
+            <div class="eyebrow">Current word</div>
+            ${state.word.trim() ? `<div class="word-display ${isNewWord ? 'pop-in' : ''}">${escapeHtml(state.word)}</div>` : `<div class="word-display placeholder">Waiting for the next word…</div>`}
+          </div>
+          <div class="teams-grid" style="--card-min:${minWidth};">${cardsHtml || `<div class="empty-note">No teams remaining.</div>`}</div>
+        </div>
+        ${winnerBanner}
+      `;
+    }
+
+    if(isNewStrike){
+      let ev = state.strikeEvent;
+      let duration = ev.eliminated ? 2400 : 1650;
+      let flash = document.createElement("div");
+      flash.className = "strike-flash";
+      flash.style.animation = `strikeFade ${duration}ms ease forwards`;
+      flash.innerHTML = `
+        <div class="flash-label" style="animation: strikeText ${duration}ms ease forwards;">${ev.eliminated ? "ELIMINATED" : "STRIKE"}</div>
+        <div class="flash-team">${escapeHtml(ev.teamName)}</div>
+        ${ev.eliminated ? `<div class="flash-remaining out">${escapeHtml(ev.teamName)} is out of the bee</div>` : `<div class="flash-remaining">${ev.remaining} strike${ev.remaining === 1 ? '' : 's'} remaining</div>`}
+      `;
+      document.body.appendChild(flash);
+      setTimeout(() => { flash.remove(); }, duration);
+      setTimeout(() => { let el = document.querySelector(`.team-card[data-team-id="${ev.teamId}"]`); if(el) el.classList.remove("strike-hit"); }, 650);
+      lastSeenStrikeEventId = ev.id;
+    }
+    if(isNewCorrect){
+      let ev = state.correctEvent;
+      let toast = document.createElement("div");
+      toast.className = "correct-flash";
+      toast.innerHTML = `<div class="cf-check">✓</div><div class="cf-text">${escapeHtml(ev.teamName)} — correct!</div>`;
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.remove(); }, 1450);
+      setTimeout(() => { let el = document.querySelector(`.team-card[data-team-id="${ev.teamId}"]`); if(el) el.classList.remove("correct-hit"); }, 850);
+      lastSeenCorrectEventId = ev.id;
+    }
+  }
+
+  // ---------------- Judge screen ----------------
+  function renderJudge(){
+    let switchLink = `<button class="btn ghost btn-sm" id="switch-role">Switch role</button>`;
+
+    if(!hasCloudStorage && !roomId){ renderMissingRoom("Judge"); return; }
+
+    if(!state.teams || state.teams.length === 0){
+      app.innerHTML = `
+        <div class="topbar"><div class="brand"><div class="hex-mini"></div> Spelling Bee — Judge</div>${switchLink}</div>
+        <div class="waiting-screen"><div class="hex-big"></div><h2>Waiting for the host to set up teams…</h2><p>This updates automatically.</p></div>
+      `;
+      bindSwitchRole();
+      return;
+    }
+
+    if(!myTeamIds || myTeamIds.length === 0){
+      let checks = state.teams.map((t, i) => `
+        <label style="display:flex; align-items:center; gap:10px; padding:12px; border:1px solid var(--line); border-radius:8px; margin-bottom:8px; background:rgba(0,0,0,0.15);">
+          <input type="checkbox" value="${t.id}" style="width:19px;height:19px;" ${pendingJudgePicks.includes(t.id) ? 'checked' : ''} />
+          <span style="font-family:var(--serif); font-style:italic; font-weight:600; font-size:16px; color:${teamColor(i)};">${escapeHtml(t.name)}</span>
+        </label>
+      `).join("");
+      app.innerHTML = `
+        <div class="topbar"><div class="brand"><div class="hex-mini"></div> Spelling Bee — Judge</div>${switchLink}</div>
+        <div class="setup-wrap">
+          <div class="setup-card">
+            <h1>Which team(s) are you judging?</h1>
+            <p class="sub">Pick one or more. You'll only see and mark results for these teams.</p>
+            <div id="judge-team-checks">${checks}</div>
+            <div class="setup-footer">
+              <button class="btn primary" id="confirm-teams-btn">Confirm</button>
+              <span class="hint" id="judge-team-error" style="color:var(--strike);"></span>
+            </div>
+          </div>
+        </div>
+      `;
+      document.querySelectorAll('#judge-team-checks input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener("change", (e) => {
+          if(e.target.checked){ if(!pendingJudgePicks.includes(e.target.value)) pendingJudgePicks.push(e.target.value); }
+          else { pendingJudgePicks = pendingJudgePicks.filter(id => id !== e.target.value); }
+        });
+      });
+      document.getElementById("confirm-teams-btn").addEventListener("click", () => {
+        if(pendingJudgePicks.length === 0){ document.getElementById("judge-team-error").textContent = "Pick at least one team."; return; }
+        let picks = pendingJudgePicks.slice();
+        pendingJudgePicks = [];
+        confirmJudgeTeams(picks);
+      });
+      bindSwitchRole();
+      return;
+    }
+
+    let myTeams = state.teams.map((t, i) => ({t, i})).filter(x => myTeamIds.includes(x.t.id));
+    let rows = myTeams.map(({t, i}) => {
+      if(t.eliminated){
+        return `<div class="round-team-row eliminated" style="--accent:${teamColor(i)};"><div class="name-block"><div class="tname">${escapeHtml(t.name)}</div><div class="current" style="color:var(--strike);">Eliminated</div></div></div>`;
+      }
+      let myVote = (myLastVotes[t.id] && myLastVotes[t.id].round === state.round) ? myLastVotes[t.id].value : null;
+      let accent = cardAccent(t, i);
+      return `
+        <div class="round-team-row" style="--accent:${accent};">
+          <div class="name-block"><div class="tname">${escapeHtml(t.name)}</div><div class="current">Spelling: ${escapeHtml(currentSpeller(t))}</div></div>
+          <div class="round-toggle">
+            <button class="btn safe ${myVote==='correct'?'active':''}" data-vote="correct" data-id="${t.id}" style="padding:13px 20px; font-size:14px;">Correct</button>
+            <button class="btn danger ${myVote==='incorrect'?'active danger-active':''}" data-vote="incorrect" data-id="${t.id}" style="padding:13px 20px; font-size:14px;">Incorrect</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    app.innerHTML = `
+      <div class="topbar">
+        <div class="brand"><div class="hex-mini"></div> Spelling Bee — Judge</div>
+        <div class="round-pill">Round ${state.round}</div>
+        <div class="topbar-actions"><button class="btn ghost btn-sm" id="change-teams">Change my teams</button>${switchLink}</div>
+      </div>
+      <div class="host-grid">
+        <div class="host-section">
+          ${state.category.trim() ? `<div class="category-tag">${escapeHtml(state.category)}</div>` : ""}
+          ${state.screen === "intro"
+            ? `<div style="font-size:12px; letter-spacing:0.15em; text-transform:uppercase; color:var(--honey); font-weight:700; margin:8px 0 6px;">Get ready</div><div style="font-family:var(--serif); font-style:italic; font-size:20px; color:var(--muted);">Word not revealed yet</div>`
+            : `<div style="font-size:12px; letter-spacing:0.15em; text-transform:uppercase; color:var(--honey); font-weight:700; margin:8px 0 6px;">Current word</div><div style="font-family:var(--display); font-size:clamp(26px,5vw,44px);">${state.word.trim() ? escapeHtml(state.word) : "Waiting for the next word…"}</div>`}
+        </div>
+        <div class="host-section"><h3>Your teams</h3>${rows}</div>
+      </div>
+    `;
+
+    document.querySelectorAll("[data-vote]").forEach(btn => { btn.addEventListener("click", (e) => { submitVote(e.target.dataset.id, e.target.dataset.vote); }); });
+    document.getElementById("change-teams").addEventListener("click", changeTeams);
+    bindSwitchRole();
+  }
+
+  // ---------------- Host screen ----------------
+  function renderHost(){
+    let active = activeTeams();
+    let markedCount = active.filter(t => state.roundResults[t.id]).length;
+    let sync = syncStatus();
+
+    let roundRows = state.teams.map((t, i) => {
+      let result = state.roundResults[t.id];
+      let accent = cardAccent(t, i);
+      return `
+        <div class="round-team-row ${t.eliminated ? 'eliminated':''}" style="--accent:${accent};">
+          <div class="name-block"><div class="tname">${escapeHtml(t.name)}</div><div class="current">Spelling: ${escapeHtml(currentSpeller(t))}${t.eliminated ? ' — eliminated' : ''}</div></div>
+          <div class="round-toggle">
+            <button class="btn btn-sm safe ${result==='correct' ? 'active':''}" data-round-action="correct" data-id="${t.id}" ${t.eliminated?'disabled':''}>Correct</button>
+            <button class="btn btn-sm danger ${result==='incorrect' ? 'active danger-active':''}" data-round-action="incorrect" data-id="${t.id}" ${t.eliminated?'disabled':''}>Incorrect</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    let scoreRows = state.teams.map((t, i) => {
+      let dots = ""; for(let s=0;s<state.strikeLimit;s++){ dots += `<div class="dot ${s < t.strikes ? 'filled':''}"></div>`; }
+      let accent = cardAccent(t, i);
+      return `
+        <div class="host-team-row" style="--accent:${accent};">
+          <div class="name-block"><div class="tname">${escapeHtml(t.name)}</div><div class="current">Up next: ${escapeHtml(currentSpeller(t))}</div></div>
+          <div class="strike-dots">${dots}</div>
+          <div class="actions">
+            <button class="btn btn-sm ghost" data-score-action="minus" data-id="${t.id}">− strike</button>
+            <button class="btn btn-sm ghost" data-score-action="plus" data-id="${t.id}">+ strike</button>
+            <button class="btn btn-sm ${t.eliminated ? 'safe' : 'danger'}" data-score-action="toggle-elim" data-id="${t.id}">${t.eliminated ? 'Reinstate' : 'Eliminate'}</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    let queueRemaining = Math.max(0, state.wordQueue.length - state.queueIndex);
+    let wordListText = state.wordQueue.length ? state.wordQueue.map(w => w.category ? (w.category + ": " + w.word) : w.word).join("\n") : "";
+
+    app.innerHTML = `
+      <div class="topbar">
+        <div class="brand"><div class="hex-mini"></div> Spelling Bee</div>
+        <div class="round-pill">Round ${state.round}</div>
+        <div class="topbar-actions">
+          <span class="sync-badge ${sync.cls}">${sync.text}</span>
+          <button class="btn primary" id="open-projector">Open projector view ↗</button>
+          <button class="btn" id="open-judge">Open a judge tab ↗</button>
+          <button class="btn ghost" id="restart-btn">Restart</button>
+        </div>
+      </div>
+
+      <div class="host-grid">
+        <div class="link-callout">
+          Everyone connects through one shared link automatically. Send this exact link to your projector and each judge — they just tap the role that's theirs when it opens: <code>${escapeHtml(baseShareUrl())}</code>
+        </div>
+
+        <div class="host-section">
+          <h3><div class="hex-badge">1</div> Word for this round<span class="sub">controls what the projector shows</span></h3>
+          <div class="current-word-row">
+            <div class="field-row"><label>Word</label><input type="text" id="word-input" value="${escapeAttr(state.word)}" placeholder="Type it in, or load a list below" /></div>
+            <div class="field-row"><label>Category (optional)</label><input type="text" id="category-input" value="${escapeAttr(state.category)}" placeholder="e.g. Animals" /></div>
+          </div>
+          <hr class="section-divider" />
+          <div class="field-row" style="margin-bottom:10px;">
+            <label>Paste your word list</label>
+            <textarea id="word-list-input" placeholder="elephant&#10;giraffe&#10;Countries:&#10;Kenya&#10;Portugal">${wordListText}</textarea>
+            <div class="hint">One word per line. For categories, put the category name on its own line ending in a colon (e.g. <code style="background:rgba(0,0,0,0.3); padding:1px 5px; border-radius:4px;">Countries:</code>) — it applies to every word below until you set a new one. Or write it inline as <code style="background:rgba(0,0,0,0.3); padding:1px 5px; border-radius:4px;">Category: word</code>.</div>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn primary btn-sm" id="load-list-btn">Load list</button>
+            <button class="btn ghost btn-sm" id="clear-list-btn">Clear list</button>
+            <button class="btn ghost btn-sm" id="skip-word-btn" ${queueRemaining===0 ? 'disabled':''}>Pull next word from list</button>
+          </div>
+          <div class="queue-status"><span>${state.wordQueue.length ? `${queueRemaining} of ${state.wordQueue.length} words remaining in the list` : "No list loaded — type words in manually above"}</span></div>
+          <hr class="section-divider" />
+          <div class="screen-status-row">
+            <span class="hint" style="margin:0;">Projector is showing: <strong style="color:var(--honey-pale);">${state.screen === 'intro' ? "Round intro — category & who's up, word hidden" : "The word"}</strong></span>
+            ${state.screen === 'intro'
+              ? `<button class="btn primary btn-sm" id="reveal-word-btn" ${!state.word.trim() ? 'disabled' : ''}>Reveal word on projector →</button>`
+              : `<button class="btn ghost btn-sm" id="show-intro-btn">← Back to round intro</button>`}
+          </div>
+          ${state.screen === 'intro' && !state.word.trim() ? `<div class="hint" style="margin-top:6px;">Add a word above (or load a list) before revealing.</div>` : ""}
+        </div>
+
+        <div class="host-section">
+          <h3><div class="hex-badge">2</div> Round ${state.round} — record results <span class="sub">${active.length} team${active.length===1?'':'s'} still spelling</span></h3>
+          ${active.length === 0 ? `<div class="empty-note">All teams have been eliminated.</div>` : `
+            <div class="progress-mini" style="margin-bottom:14px;"><div class="plabel">${markedCount} of ${active.length} results in</div><div class="progress-wrap"><div class="progress-fill" style="width:${active.length ? (markedCount/active.length*100) : 0}%"></div></div></div>
+            ${roundRows}
+            <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+              <button class="btn ghost btn-sm" id="mark-all-correct">Mark remaining as correct</button>
+              <button class="btn primary" id="next-round-btn" ${allActiveMarked() ? '' : 'disabled'}>Next round →</button>
+              <button class="btn ghost btn-sm" id="undo-round-btn" ${state.lastSnapshot ? '' : 'disabled'}>Undo last round</button>
+            </div>
+            ${!allActiveMarked() ? `<div class="hint" style="margin-top:8px;">Judges' results appear here automatically — or mark a team yourself. Strikes and correct answers show on the projector the moment they're recorded. A team turns red once they're down to their last strike.</div>` : ""}
+          `}
+        </div>
+
+        <div class="host-section"><h3><div class="hex-badge">3</div> Teams &amp; scores <span class="sub">manual corrections</span></h3><div class="teams-score-list">${scoreRows}</div></div>
+      </div>
+    `;
+
+    document.getElementById("open-projector").addEventListener("click", () => { window.open(projectorUrl(), "_blank"); });
+    document.getElementById("open-judge").addEventListener("click", () => { window.open(judgeUrl(), "_blank"); });
+    document.getElementById("restart-btn").addEventListener("click", async () => {
+      if(confirm("Restart and clear the current teams and scores?")){
+        await sharedDelete("gameConfig");
+        state = { mode: "setup", strikeLimit: 3, teams: [], round: 1, word: "", category: "", wordQueue: [], queueIndex: 0, roundResults: {}, lastSnapshot: null, strikeEvent: null, correctEvent: null, screen: "intro" };
+        render();
+      }
+    });
+
+    document.getElementById("word-input").addEventListener("input", (e) => { state.word = e.target.value; saveGameConfig(); });
+    document.getElementById("category-input").addEventListener("input", (e) => { state.category = e.target.value; saveGameConfig(); });
+    document.getElementById("load-list-btn").addEventListener("click", () => { loadWordList(document.getElementById("word-list-input").value); });
+    document.getElementById("clear-list-btn").addEventListener("click", clearWordList);
+    let skipBtn = document.getElementById("skip-word-btn"); if(skipBtn) skipBtn.addEventListener("click", skipToNextQueuedWord);
+    let markAllBtn = document.getElementById("mark-all-correct"); if(markAllBtn) markAllBtn.addEventListener("click", markAllCorrect);
+    let nextRoundBtn = document.getElementById("next-round-btn"); if(nextRoundBtn) nextRoundBtn.addEventListener("click", nextRound);
+    let undoRoundBtn = document.getElementById("undo-round-btn"); if(undoRoundBtn) undoRoundBtn.addEventListener("click", undoLastRound);
+    let revealBtn = document.getElementById("reveal-word-btn"); if(revealBtn) revealBtn.addEventListener("click", revealWord);
+    let introBtn = document.getElementById("show-intro-btn"); if(introBtn) introBtn.addEventListener("click", showIntroScreen);
+
+    document.querySelectorAll("[data-round-action]").forEach(btn => { btn.addEventListener("click", (e) => { hostSetResult(e.target.dataset.id, e.target.dataset.roundAction); }); });
+    document.querySelectorAll("[data-score-action]").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        let id = e.target.dataset.id; let action = e.target.dataset.scoreAction;
+        if(action === "plus") adjustStrike(id, 1);
+        else if(action === "minus") adjustStrike(id, -1);
+        else if(action === "toggle-elim") toggleEliminated(id);
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>
