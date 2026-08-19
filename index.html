@@ -634,7 +634,9 @@
     let activeBefore = activeTeams();
     let busted = activeBefore.filter(t => t.strikes >= state.strikeLimit);
     let forgiven = false;
-    if(activeBefore.length === 2 && busted.length === 2){
+    // If EVERY currently-active team busted this round (whether that's 2, 3, or more),
+    // nobody's actually out — eliminating all of them would leave zero teams and no winner.
+    if(activeBefore.length > 0 && busted.length === activeBefore.length){
       busted.forEach(t => { t.strikes = state.strikeLimit - 1; });
       forgiven = true;
     } else {
@@ -858,9 +860,8 @@
         </div>
         <div class="stage">
           <div class="word-banner">
-            ${state.category.trim() ? `<div class="category-tag">${escapeHtml(state.category)}</div><br/>` : ""}
-            <div class="eyebrow">${state.category.trim() ? "Next category" : "Get ready"}</div>
-            <div class="word-display placeholder">Word coming up…</div>
+            ${state.category.trim() ? `<div class="category-tag">${escapeHtml(state.category)}</div>` : ""}
+            <div class="eyebrow" style="margin-top: ${state.category.trim() ? '4px' : '0'};">Who's up next</div>
           </div>
           <div class="teams-grid" style="--card-min:${minWidth};">${cardsHtml || `<div class="empty-note">No teams remaining.</div>`}</div>
         </div>
