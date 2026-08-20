@@ -122,7 +122,9 @@
   /* ---------- Category reveal screen ---------- */
   .category-screen{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding: 40px; }
   .category-screen .eyebrow{ font-size: clamp(14px,1.8vw,18px); letter-spacing:0.25em; text-transform:uppercase; color: var(--honey); font-weight:700; margin-bottom:22px; }
-  .category-screen .cat-name{ font-family: var(--display); font-size: clamp(48px, 10vw, 140px); color: var(--chalk); line-height:1.02; text-shadow: 0 0 60px rgba(234,174,63,0.25); animation: wordPop 0.55s cubic-bezier(.22,.85,.32,1.35); word-break: break-word; max-width: 1100px; }
+  .category-screen .cat-name{ font-family: var(--display); font-size: clamp(48px, 10vw, 140px); color: var(--chalk); line-height:1.02; text-shadow: 0 0 60px rgba(234,174,63,0.25); word-break: break-word; max-width: 1100px; }
+  .category-screen .cat-name.pop-in{ animation: catPop 0.5s ease-out; }
+  @keyframes catPop{ 0%{ transform:scale(0.94); opacity:0.2; } 100%{ transform:scale(1); opacity:1; } }
   .category-screen .cat-sub{ margin-top:26px; font-family: var(--serif); font-style:italic; color: var(--muted); font-size: clamp(16px,2vw,22px); }
 
   /* ---------- Round results recap screen ---------- */
@@ -146,7 +148,8 @@
   .winner-screen{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding: 40px; position:relative; overflow:hidden; }
   .winner-screen .eyebrow{ font-size: clamp(14px,2vw,20px); letter-spacing:0.3em; text-transform:uppercase; color: var(--honey); font-weight:700; margin-bottom:18px; animation: winnerFadeIn 0.8s ease; }
   .winner-screen .trophy{ font-size: clamp(56px, 9vw, 110px); margin-bottom: 10px; animation: trophyBounce 1.4s ease infinite; }
-  .winner-screen .winner-name{ font-family: var(--display); font-size: clamp(52px, 11vw, 150px); color: var(--chalk); line-height:1.02; text-shadow: 0 0 80px rgba(234,174,63,0.5); animation: winnerPop 0.8s cubic-bezier(.22,.85,.32,1.4); word-break: break-word; max-width: 1150px; }
+  .winner-screen .winner-name{ font-family: var(--display); font-size: clamp(52px, 11vw, 150px); color: var(--chalk); line-height:1.02; text-shadow: 0 0 80px rgba(234,174,63,0.5); word-break: break-word; max-width: 1150px; }
+  .winner-screen .winner-name.pop-in{ animation: winnerPop 0.8s cubic-bezier(.22,.85,.32,1.4); }
   .winner-screen .winner-sub{ margin-top: 22px; font-family: var(--serif); font-style:italic; color: var(--honey-pale); font-size: clamp(18px,2.6vw,26px); animation: winnerFadeIn 1.2s ease; }
   @keyframes winnerFadeIn{ 0%{ opacity:0; } 100%{ opacity:1; } }
   @keyframes winnerPop{ 0%{ transform: scale(0.6); opacity:0; } 60%{ transform: scale(1.08); opacity:1; } 100%{ transform: scale(1); } }
@@ -306,12 +309,15 @@
   let lastSeenStrikeEventId = null;
   let lastSeenCorrectEventId = null;
   let lastWordAnimKey = null;
+  let lastCategoryAnimKey = null;
+  let lastWinnerAnimKey = null;
 
   // ---------------- Role + state ----------------
   let myRole = null;
   let myTeamIds = [];
   let myLastVotes = {};
   let pendingJudgePicks = [];
+  let lastJudgeTapAt = 0;
 
   let state = {
     mode: "setup",
@@ -347,9 +353,14 @@
   }
 
   function saveGameConfig(){ sharedSet("gameConfig", JSON.stringify(state)); }
+  let lastRawGameConfig = null;
   async function refreshRemoteState(){
     let raw = await sharedGet("gameConfig");
-    if(raw){ try{ let parsed = JSON.parse(raw); state = Object.assign({}, state, parsed); }catch(e){} }
+    if(raw && raw !== lastRawGameConfig){
+      lastRawGameConfig = raw;
+      try{ let parsed = JSON.parse(raw); state = Object.assign({}, state, parsed); return true; }catch(e){ return false; }
+    }
+    return false;
   }
 
   function getMyRole(){ try{ return sessionStorage.getItem("beeMyRole_v1"); }catch(e){ return null; } }
@@ -376,12 +387,18 @@
       setInterval(pollVotes, 700);
     } else if(myRole === "projector" || myRole === "judge"){
       await refreshRemoteState();
+      lastRawGameConfig = await sharedGet("gameConfig");
       // seed "already seen" markers so a fresh page load never replays old effects
       lastSeenStrikeEventId = state.strikeEvent ? state.strikeEvent.id : null;
       lastSeenCorrectEventId = state.correctEvent ? state.correctEvent.id : null;
       lastWordAnimKey = state.round + "::" + state.word;
       render();
-      setInterval(async () => { await refreshRemoteState(); render(); }, 700);
+      setInterval(async () => {
+        let changed = await refreshRemoteState();
+        // give a just-tapped button a moment before we rebuild the screen under it
+        if(myRole === "judge" && Date.now() - lastJudgeTapAt < 500) return;
+        if(changed) render();
+      }, 700);
     } else {
       render();
     }
@@ -760,7 +777,9 @@
     }
   }
 
+  let cachedConfetti = null;
   function confettiPieces(){
+    if(cachedConfetti) return cachedConfetti;
     const colors = TEAM_COLORS;
     let out = "";
     for(let i=0;i<40;i++){
@@ -771,6 +790,7 @@
       let duration = 3 + Math.random()*2.5;
       out += `<div class="confetti-piece" style="left:${left}%; width:${size}px; height:${size*0.4}px; background:${color}; animation-duration:${duration}s; animation-delay:${delay}s;"></div>`;
     }
+    cachedConfetti = out;
     return out;
   }
 
@@ -790,13 +810,16 @@
 
     if(state.screen === "winner"){
       let winner = state.teams.find(t => t.id === state.winnerTeamId);
+      let winAnimKey = state.winnerTeamId || "";
+      let isNewWinnerAnim = winAnimKey !== lastWinnerAnimKey;
+      lastWinnerAnimKey = winAnimKey;
       app.innerHTML = `
         <div class="topbar"><div class="brand"><div class="hex-mini"></div> Spelling Bee</div></div>
         <div class="winner-screen">
           ${confettiPieces()}
           <div class="eyebrow">Spelling Bee Champion</div>
           <div class="trophy">🏆</div>
-          <div class="winner-name">${winner ? escapeHtml(winner.name) : "—"}</div>
+          <div class="winner-name ${isNewWinnerAnim ? 'pop-in' : ''}">${winner ? escapeHtml(winner.name) : "—"}</div>
           <div class="winner-sub">Congratulations!</div>
         </div>
       `;
@@ -808,10 +831,14 @@
       let recap = state.roundRecap;
       let entries = recap ? recap.entries : [];
       let cards = entries.map((e, i) => {
+        let team = state.teams.find(t => t.id === e.teamId);
+        let strikes = team ? team.strikes : 0;
+        let strikeHexes = ""; for(let s=0;s<state.strikeLimit;s++){ strikeHexes += `<div class="strike-hex ${s < strikes ? 'filled':''}"></div>`; }
         return `
           <div class="recap-card ${e.eliminated ? 'recap-out' : ''}" style="--accent:${teamColor(i)};">
             <div class="rc-name">${escapeHtml(e.teamName)}</div>
             <div class="rc-result ${e.result || 'none'}">${e.result === 'correct' ? '✓ Correct' : e.result === 'incorrect' ? '✗ Incorrect' : 'No result recorded'}</div>
+            <div class="strikes-row">${strikeHexes}</div>
             ${e.eliminated ? `<div class="rc-out-stamp">OUT</div>` : ""}
           </div>
         `;
@@ -837,6 +864,9 @@
     let cardsHtml = buildTeamCards(aliveList, scale, isNewStrike, isNewCorrect, state.screen === "intro");
 
     if(state.screen === "category"){
+      let catAnimKey = state.round + "::" + state.category;
+      let isNewCategoryAnim = catAnimKey !== lastCategoryAnimKey;
+      lastCategoryAnimKey = catAnimKey;
       app.innerHTML = `
         <div class="topbar">
           <div class="brand"><div class="hex-mini"></div> Spelling Bee</div>
@@ -844,7 +874,7 @@
         </div>
         <div class="category-screen">
           <div class="eyebrow">New Category</div>
-          <div class="cat-name">${escapeHtml(state.category)}</div>
+          <div class="cat-name ${isNewCategoryAnim ? 'pop-in' : ''}">${escapeHtml(state.category)}</div>
           <div class="cat-sub">Get ready…</div>
         </div>
       `;
@@ -988,7 +1018,7 @@
       </div>
     `;
 
-    document.querySelectorAll("[data-vote]").forEach(btn => { btn.addEventListener("click", (e) => { if(!btn.disabled) submitVote(e.target.dataset.id, e.target.dataset.vote); }); });
+    document.querySelectorAll("[data-vote]").forEach(btn => { btn.addEventListener("click", (e) => { if(!btn.disabled){ lastJudgeTapAt = Date.now(); submitVote(e.target.dataset.id, e.target.dataset.vote); } }); });
     document.getElementById("change-teams").addEventListener("click", changeTeams);
     bindSwitchRole();
   }
@@ -1139,14 +1169,17 @@
     let winner = isWinner ? state.teams.find(t => t.id === state.winnerTeamId) : null;
     let recap = state.roundRecap;
 
-    let recapRows = recap ? recap.entries.map((e, i) => `
+    let recapRows = recap ? recap.entries.map((e, i) => {
+      let team = state.teams.find(t => t.id === e.teamId);
+      let strikes = team ? team.strikes : 0;
+      return `
       <div class="round-team-row ${e.eliminated ? 'eliminated' : ''}" style="--accent:${teamColor(i)};">
         <div class="name-block">
           <div class="tname">${escapeHtml(e.teamName)}</div>
-          <div class="current">${e.result === 'correct' ? '✓ Correct' : e.result === 'incorrect' ? '✗ Incorrect' : 'No result recorded'}${e.eliminated ? ' — ELIMINATED' : ''}</div>
+          <div class="current">${e.result === 'correct' ? '✓ Correct' : e.result === 'incorrect' ? '✗ Incorrect' : 'No result recorded'} · ${strikes}/${state.strikeLimit} strikes${e.eliminated ? ' — ELIMINATED' : ''}</div>
         </div>
       </div>
-    `).join("") : "";
+    `; }).join("") : "";
 
     app.innerHTML = `
       <div class="topbar">
