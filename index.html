@@ -25,6 +25,10 @@
   .brand .hex-mini{ width:17px; height:17px; background:var(--honey); clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%); flex-shrink:0; box-shadow: 0 0 10px rgba(234,174,63,0.5); }
   .topbar-mid{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
   .round-pill{ font-family: var(--display); font-weight:400; font-size: clamp(18px, 2.1vw, 26px); color: var(--bg); background: var(--honey); border-radius: 22px; padding: 10px 24px; letter-spacing:0.04em; text-transform:uppercase; box-shadow: 0 0 22px -4px rgba(234,174,63,0.65); }
+  .timer-pill{ font-family: var(--display); font-weight:400; font-size: clamp(18px, 2.1vw, 26px); color: var(--chalk); background: var(--panel-raised); border: 2px solid var(--honey-deep); border-radius: 22px; padding: 8px 22px; min-width: 60px; text-align:center; }
+  .timer-pill.timer-critical{ color: var(--chalk); background: var(--strike); border-color: var(--strike); animation: timerPulse 1s ease infinite; }
+  .timer-pill.timer-done{ color: var(--strike); background: var(--bg); border-color: var(--strike); }
+  @keyframes timerPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.08); } }
   .progress-mini{ display:flex; flex-direction:column; gap:4px; min-width:150px; }
   .progress-mini .plabel{ font-size:11px; color:var(--muted); font-weight:600; letter-spacing:0.03em; }
   .progress-wrap{ width:100%; height:7px; background:var(--line); border-radius:6px; overflow:hidden; }
@@ -335,7 +339,8 @@
     screen: "intro",       // 'category' | 'intro' | 'word' | 'results' | 'winner'
     roundRecap: null,      // { entries: [{teamId,teamName,result,eliminated}], forgiven }
     pendingNextScreen: null,
-    winnerTeamId: null
+    winnerTeamId: null,
+    timer: { duration: 30, remaining: 30, endsAt: null }
   };
 
   let setupDraft = {
@@ -491,6 +496,7 @@
           <div class="team-list-scroll">${teamBlocks}</div>
           <div class="setup-footer">
             <button class="btn primary" id="start-btn">Start the bee →</button>
+            <button class="btn ghost" id="test-mode-btn">⚡ Quick test setup (3 teams + sample words)</button>
             <span class="hint" id="setup-error" style="color:var(--strike);"></span>
           </div>
         </div>
@@ -505,6 +511,7 @@
     document.querySelectorAll('[data-role="team-name"]').forEach(inp => { inp.addEventListener("input", (e) => { setupDraft.teams[parseInt(e.target.dataset.idx)].name = e.target.value; }); });
     document.querySelectorAll('[data-role="team-members"]').forEach(inp => { inp.addEventListener("input", (e) => { setupDraft.teams[parseInt(e.target.dataset.idx)].members = e.target.value; }); });
     document.getElementById("start-btn").addEventListener("click", startBee);
+    document.getElementById("test-mode-btn").addEventListener("click", startTestBee);
   }
 
   function syncDraftCount(){
@@ -528,6 +535,31 @@
     state.wordQueue = []; state.queueIndex = 0; state.roundResults = {};
     state.lastSnapshot = null; state.strikeEvent = null; state.correctEvent = null;
     state.screen = "intro"; state.roundRecap = null; state.pendingNextScreen = null; state.winnerTeamId = null;
+    state.timer = { duration: 30, remaining: 30, endsAt: null };
+    state.mode = "host";
+    saveGameConfig(); render();
+  }
+
+  // One-click test game: 3 dummy teams + a small sample word list, so you can try out the
+  // whole flow (rounds, strikes, eliminations, the winner screen) without typing anything.
+  function startTestBee(){
+    let teams = [
+      { id: uid(), name: "Team Falcons", members: ["Alex", "Sam"], turn: 0, strikes: 0, eliminated: false },
+      { id: uid(), name: "Team Otters", members: ["Jamie", "Priya"], turn: 0, strikes: 0, eliminated: false },
+      { id: uid(), name: "Team Comets", members: ["Lee", "Morgan"], turn: 0, strikes: 0, eliminated: false }
+    ];
+    let sampleList = "Animals:\nCat\nDog\nElephant\nCountries:\nCanada\nJapan\nBrazil\nFood:\nPizza\nBanana";
+    let queue = parseWordList(sampleList);
+
+    state.teams = teams;
+    state.strikeLimit = 3;
+    state.round = 1;
+    state.wordQueue = queue; state.queueIndex = 1;
+    state.word = queue[0].word; state.category = queue[0].category || "";
+    state.roundResults = {};
+    state.lastSnapshot = null; state.strikeEvent = null; state.correctEvent = null;
+    state.screen = "intro"; state.roundRecap = null; state.pendingNextScreen = null; state.winnerTeamId = null;
+    state.timer = { duration: 30, remaining: 30, endsAt: null };
     state.mode = "host";
     saveGameConfig(); render();
   }
@@ -566,8 +598,57 @@
     }
   }
 
+  // ---------------- Timer (host-controlled, ticks locally so it doesn't need a network write every second) ----------------
+  function computeTimerRemaining(){
+    if(!state.timer) return 0;
+    if(state.timer.endsAt){ return Math.max(0, Math.ceil((state.timer.endsAt - Date.now()) / 1000)); }
+    return state.timer.remaining;
+  }
+  function formatTime(s){
+    s = Math.max(0, Math.round(s));
+    if(s >= 60){ let m = Math.floor(s/60); let sec = s % 60; return m + ":" + String(sec).padStart(2, "0"); }
+    return String(s);
+  }
+  function setTimerDuration(seconds){
+    seconds = Math.max(5, Math.min(600, Math.round(seconds)));
+    state.timer = { duration: seconds, remaining: seconds, endsAt: null };
+    saveGameConfig(); render();
+  }
+  function startTimer(){
+    if(!state.timer || state.timer.endsAt) return;
+    let remaining = state.timer.remaining > 0 ? state.timer.remaining : state.timer.duration;
+    state.timer.endsAt = Date.now() + remaining * 1000;
+    saveGameConfig(); render();
+  }
+  function pauseTimer(){
+    if(!state.timer || !state.timer.endsAt) return;
+    state.timer.remaining = computeTimerRemaining();
+    state.timer.endsAt = null;
+    saveGameConfig(); render();
+  }
+  function resetTimer(){
+    if(!state.timer) return;
+    state.timer.remaining = state.timer.duration;
+    state.timer.endsAt = null;
+    saveGameConfig(); render();
+  }
+  function tickTimerDisplay(){
+    let el = document.getElementById("timer-display");
+    if(!el) return;
+    let remaining = computeTimerRemaining();
+    el.textContent = formatTime(remaining);
+    el.classList.toggle("timer-critical", remaining > 0 && remaining <= 5);
+    el.classList.toggle("timer-done", remaining <= 0 && !!(state.timer && state.timer.endsAt));
+  }
+  setInterval(tickTimerDisplay, 250);
+
   // ---------------- Screen control (host) ----------------
-  function revealWord(){ if(!state.word.trim()) return; state.screen = "word"; saveGameConfig(); render(); }
+  function revealWord(){
+    if(!state.word.trim()) return;
+    state.screen = "word";
+    if(state.timer){ state.timer.remaining = state.timer.duration; state.timer.endsAt = null; }
+    saveGameConfig(); render();
+  }
   function showIntroScreen(){ state.screen = "intro"; saveGameConfig(); render(); }
   function advanceFromCategoryScreen(){ state.screen = "intro"; saveGameConfig(); render(); }
   function advanceFromResults(){
@@ -748,6 +829,12 @@
     }).join("");
   }
 
+  function timerPillActive(){ return state.timer && (state.timer.endsAt || state.timer.remaining !== state.timer.duration); }
+  function timerPillHtml(){
+    if(!timerPillActive()) return "";
+    return `<div class="timer-pill" id="timer-display">${formatTime(computeTimerRemaining())}</div>`;
+  }
+
   function triggerFlashes(isNewStrike, isNewCorrect){
     if(isNewStrike){
       let ev = state.strikeEvent;
@@ -870,7 +957,7 @@
       app.innerHTML = `
         <div class="topbar">
           <div class="brand"><div class="hex-mini"></div> Spelling Bee</div>
-          <div class="topbar-mid"><div class="round-pill">Round ${state.round}</div></div>
+          <div class="topbar-mid"><div class="round-pill">Round ${state.round}</div>${timerPillHtml()}</div>
         </div>
         <div class="category-screen">
           <div class="eyebrow">New Category</div>
@@ -886,7 +973,7 @@
       app.innerHTML = `
         <div class="topbar">
           <div class="brand"><div class="hex-mini"></div> Spelling Bee</div>
-          <div class="topbar-mid"><div class="round-pill">Round ${state.round}</div></div>
+          <div class="topbar-mid"><div class="round-pill">Round ${state.round}</div>${timerPillHtml()}</div>
         </div>
         <div class="stage">
           <div class="word-banner">
@@ -913,6 +1000,7 @@
         <div class="brand"><div class="hex-mini"></div> Spelling Bee</div>
         <div class="topbar-mid">
           <div class="round-pill">Round ${state.round}</div>
+          ${timerPillHtml()}
           ${showProgress ? `<div class="progress-mini"><div class="plabel">${markedCount} of ${active.length} results in</div><div class="progress-wrap"><div class="progress-fill" style="width:${active.length ? (markedCount/active.length*100) : 0}%"></div></div></div>` : ""}
         </div>
       </div>
@@ -1085,6 +1173,27 @@
         </div>
 
         <div class="host-section">
+          <h3>⏱ Speaking timer <span class="sub">optional — resets automatically each time you reveal a word</span></h3>
+          <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+            <div id="timer-display" style="font-family:var(--display); font-size:44px; color:var(--honey-pale); min-width:80px;">${formatTime(computeTimerRemaining())}</div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+              <button class="btn btn-sm ${state.timer && state.timer.duration===10 ? 'active':''}" data-timer-preset="10">10s</button>
+              <button class="btn btn-sm ${state.timer && state.timer.duration===15 ? 'active':''}" data-timer-preset="15">15s</button>
+              <button class="btn btn-sm ${state.timer && state.timer.duration===30 ? 'active':''}" data-timer-preset="30">30s</button>
+              <button class="btn btn-sm ${state.timer && state.timer.duration===45 ? 'active':''}" data-timer-preset="45">45s</button>
+              <button class="btn btn-sm ${state.timer && state.timer.duration===60 ? 'active':''}" data-timer-preset="60">60s</button>
+              <input type="number" id="timer-custom" min="5" max="600" value="${state.timer ? state.timer.duration : 30}" style="width:64px; background: var(--bg); border:1px solid var(--line); border-radius:6px; color: var(--chalk); padding:6px 8px; font-size:13px;" />
+              <button class="btn btn-sm ghost" id="timer-set-custom">Set</button>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <button class="btn primary btn-sm" id="timer-start" ${state.timer && state.timer.endsAt ? 'disabled':''}>▶ Start</button>
+              <button class="btn btn-sm" id="timer-pause" ${!(state.timer && state.timer.endsAt) ? 'disabled':''}>⏸ Pause</button>
+              <button class="btn ghost btn-sm" id="timer-reset">↺ Reset</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="host-section">
           <h3><div class="hex-badge">1</div> Word for this round<span class="sub">controls what the projector shows</span></h3>
           <div class="current-word-row">
             <div class="field-row"><label>Word</label><input type="text" id="word-input" value="${escapeAttr(state.word)}" placeholder="Type it in, or load a list below" /></div>
@@ -1136,7 +1245,7 @@
     document.getElementById("restart-btn").addEventListener("click", async () => {
       if(confirm("Restart and clear the current teams and scores?")){
         await sharedDelete("gameConfig");
-        state = { mode: "setup", strikeLimit: 3, teams: [], round: 1, word: "", category: "", wordQueue: [], queueIndex: 0, roundResults: {}, lastSnapshot: null, strikeEvent: null, correctEvent: null, screen: "intro", roundRecap: null, pendingNextScreen: null, winnerTeamId: null };
+        state = { mode: "setup", strikeLimit: 3, teams: [], round: 1, word: "", category: "", wordQueue: [], queueIndex: 0, roundResults: {}, lastSnapshot: null, strikeEvent: null, correctEvent: null, screen: "intro", roundRecap: null, pendingNextScreen: null, winnerTeamId: null, timer: { duration: 30, remaining: 30, endsAt: null } };
         render();
       }
     });
@@ -1152,6 +1261,15 @@
     let revealBtn = document.getElementById("reveal-word-btn"); if(revealBtn) revealBtn.addEventListener("click", revealWord);
     let introBtn = document.getElementById("show-intro-btn"); if(introBtn) introBtn.addEventListener("click", showIntroScreen);
     let advCatBtn = document.getElementById("advance-category-btn"); if(advCatBtn) advCatBtn.addEventListener("click", advanceFromCategoryScreen);
+
+    document.querySelectorAll("[data-timer-preset]").forEach(btn => { btn.addEventListener("click", (e) => { setTimerDuration(parseInt(e.target.dataset.timerPreset)); }); });
+    document.getElementById("timer-set-custom").addEventListener("click", () => {
+      let val = parseInt(document.getElementById("timer-custom").value) || (state.timer ? state.timer.duration : 30);
+      setTimerDuration(val);
+    });
+    document.getElementById("timer-start").addEventListener("click", startTimer);
+    document.getElementById("timer-pause").addEventListener("click", pauseTimer);
+    document.getElementById("timer-reset").addEventListener("click", resetTimer);
 
     document.querySelectorAll("[data-round-action]").forEach(btn => { btn.addEventListener("click", (e) => { hostSetResult(e.target.dataset.id, e.target.dataset.roundAction); }); });
     document.querySelectorAll("[data-score-action]").forEach(btn => {
@@ -1217,7 +1335,7 @@
     document.getElementById("restart-btn").addEventListener("click", async () => {
       if(confirm("Restart and clear the current teams and scores?")){
         await sharedDelete("gameConfig");
-        state = { mode: "setup", strikeLimit: 3, teams: [], round: 1, word: "", category: "", wordQueue: [], queueIndex: 0, roundResults: {}, lastSnapshot: null, strikeEvent: null, correctEvent: null, screen: "intro", roundRecap: null, pendingNextScreen: null, winnerTeamId: null };
+        state = { mode: "setup", strikeLimit: 3, teams: [], round: 1, word: "", category: "", wordQueue: [], queueIndex: 0, roundResults: {}, lastSnapshot: null, strikeEvent: null, correctEvent: null, screen: "intro", roundRecap: null, pendingNextScreen: null, winnerTeamId: null, timer: { duration: 30, remaining: 30, endsAt: null } };
         render();
       }
     });
