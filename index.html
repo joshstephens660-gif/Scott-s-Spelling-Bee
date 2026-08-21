@@ -25,7 +25,7 @@
   .brand .hex-mini{ width:17px; height:17px; background:var(--honey); clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%); flex-shrink:0; box-shadow: 0 0 10px rgba(234,174,63,0.5); }
   .topbar-mid{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
   .round-pill{ font-family: var(--display); font-weight:400; font-size: clamp(18px, 2.1vw, 26px); color: var(--bg); background: var(--honey); border-radius: 22px; padding: 10px 24px; letter-spacing:0.04em; text-transform:uppercase; box-shadow: 0 0 22px -4px rgba(234,174,63,0.65); }
-  .timer-pill{ font-family: var(--display); font-weight:400; font-size: clamp(18px, 2.1vw, 26px); color: var(--chalk); background: var(--panel-raised); border: 2px solid var(--honey-deep); border-radius: 22px; padding: 8px 22px; min-width: 60px; text-align:center; }
+  .timer-pill{ font-family: var(--display); font-weight:400; font-size: clamp(34px, 4.5vw, 60px); color: var(--chalk); background: var(--panel-raised); border: 3px solid var(--honey-deep); border-radius: 26px; padding: 10px 34px; min-width: 110px; text-align:center; }
   .timer-pill.timer-critical{ color: var(--chalk); background: var(--strike); border-color: var(--strike); animation: timerPulse 1s ease infinite; }
   .timer-pill.timer-done{ color: var(--strike); background: var(--bg); border-color: var(--strike); }
   @keyframes timerPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.08); } }
@@ -1175,7 +1175,7 @@
         <div class="host-section">
           <h3>⏱ Speaking timer <span class="sub">optional — resets automatically each time you reveal a word</span></h3>
           <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-            <div id="timer-display" style="font-family:var(--display); font-size:44px; color:var(--honey-pale); min-width:80px;">${formatTime(computeTimerRemaining())}</div>
+            <div id="timer-display" style="font-family:var(--display); font-size:64px; color:var(--honey-pale); min-width:120px;">${formatTime(computeTimerRemaining())}</div>
             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
               <button class="btn btn-sm ${state.timer && state.timer.duration===10 ? 'active':''}" data-timer-preset="10">10s</button>
               <button class="btn btn-sm ${state.timer && state.timer.duration===15 ? 'active':''}" data-timer-preset="15">15s</button>
