@@ -350,6 +350,18 @@
 
   const app = document.getElementById("app");
 
+  // Hotkey: Space or Enter advances the bee, as long as you're not typing in a field.
+  document.addEventListener("keydown", (e) => {
+    if(myRole !== "host" || state.mode !== "host") return;
+    let tag = (document.activeElement && document.activeElement.tagName) || "";
+    if(tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if(e.code === "Space" || e.key === "Enter"){
+      if(continueDisabled()) return;
+      e.preventDefault();
+      continueFlow();
+    }
+  });
+
   function render(){
     if(myRole === "host") return state.mode === "setup" ? renderSetup() : renderHost();
     if(myRole === "projector") return renderDisplay();
@@ -656,6 +668,28 @@
     state.pendingNextScreen = null;
     state.roundRecap = null;
     saveGameConfig(); render();
+  }
+
+  // Single "what's next" action driving the whole show — one button/hotkey instead of
+  // hunting for the right control on each screen.
+  function continueFlow(){
+    if(state.screen === "category"){ advanceFromCategoryScreen(); }
+    else if(state.screen === "intro"){ revealWord(); }
+    else if(state.screen === "word"){ if(allActiveMarked()) finishRound(); }
+    else if(state.screen === "results"){ advanceFromResults(); }
+  }
+  function continueLabel(){
+    if(state.screen === "category") return "Continue → Show lineup";
+    if(state.screen === "intro") return "Reveal word →";
+    if(state.screen === "word") return "Finish round →";
+    if(state.screen === "results") return state.pendingNextScreen === "winner" ? "Reveal the winner →" : "Continue →";
+    return "Continue →";
+  }
+  function continueDisabled(){
+    if(state.screen === "intro") return !state.word.trim();
+    if(state.screen === "word") return !allActiveMarked();
+    if(state.screen === "winner") return true;
+    return false;
   }
 
   // ---------------- Round / strike / correct logic (host only) ----------------
@@ -1159,6 +1193,7 @@
       <div class="topbar">
         <div class="brand"><div class="hex-mini"></div> Spelling Bee</div>
         <div class="round-pill">Round ${state.round}</div>
+        <button class="btn primary" id="continue-flow-btn" ${continueDisabled() ? 'disabled' : ''} style="font-size:15px; padding:12px 22px;">${continueLabel()} <span style="opacity:0.7; font-weight:500; font-size:12px;">(Space)</span></button>
         <div class="topbar-actions">
           <span class="sync-badge ${sync.cls}">${sync.text}</span>
           <button class="btn primary" id="open-projector">Open projector view ↗</button>
@@ -1213,11 +1248,8 @@
           <div class="queue-status"><span>${state.wordQueue.length ? `${queueRemaining} of ${state.wordQueue.length} words remaining in the list` : "No list loaded — type words in manually above"}</span></div>
           <hr class="section-divider" />
           <div class="screen-status-row">
-            <span class="hint" style="margin:0;">Projector is showing: <strong style="color:var(--honey-pale);">${state.screen === 'category' ? 'New category reveal' : state.screen === 'intro' ? "Round intro — category & who's up, word hidden" : 'The word'}</strong></span>
-            ${state.screen === 'category' ? `<button class="btn primary btn-sm" id="advance-category-btn">Continue → Show lineup</button>` : ""}
-            ${state.screen === 'intro'
-              ? `<button class="btn primary btn-sm" id="reveal-word-btn" ${!state.word.trim() ? 'disabled' : ''}>Reveal word on projector →</button>`
-              : state.screen === 'word' ? `<button class="btn ghost btn-sm" id="show-intro-btn">← Back to round intro</button>` : ""}
+            <span class="hint" style="margin:0;">Projector is showing: <strong style="color:var(--honey-pale);">${state.screen === 'category' ? 'New category reveal' : state.screen === 'intro' ? "Round intro — category & who's up, word hidden" : 'The word'}</strong> — use the Continue button up top (or press Space) to move forward.</span>
+            ${state.screen === 'word' ? `<button class="btn ghost btn-sm" id="show-intro-btn">← Back to round intro</button>` : ""}
           </div>
           ${state.screen === 'intro' && !state.word.trim() ? `<div class="hint" style="margin-top:6px;">Add a word above (or load a list) before revealing.</div>` : ""}
         </div>
@@ -1229,10 +1261,9 @@
             ${roundRows}
             <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
               <button class="btn ghost btn-sm" id="mark-all-correct">Mark remaining as correct</button>
-              <button class="btn primary" id="finish-round-btn" ${allActiveMarked() ? '' : 'disabled'}>Finish round →</button>
               <button class="btn ghost btn-sm" id="undo-round-btn" ${state.lastSnapshot ? '' : 'disabled'}>Undo last round</button>
             </div>
-            ${!allActiveMarked() ? `<div class="hint" style="margin-top:8px;">Judges' results appear here automatically — or mark a team yourself. Nobody is actually eliminated until you click Finish round — if the last two teams both miss, neither is out.</div>` : `<div class="hint" style="margin-top:8px;">This won't show a winner yet even if only one team would be left — you'll see a results recap first.</div>`}
+            ${!allActiveMarked() ? `<div class="hint" style="margin-top:8px;">Judges' results appear here automatically — or mark a team yourself. Once everyone's marked, hit Continue up top (or Space) to finish the round. Nobody is actually eliminated until then — if the last two teams both miss, neither is out.</div>` : `<div class="hint" style="margin-top:8px;">Everyone's marked — hit Continue up top (or Space) to finish the round. This won't show a winner yet even if only one team would be left — you'll see a results recap first.</div>`}
           `}
         </div>
 
@@ -1256,11 +1287,9 @@
     document.getElementById("clear-list-btn").addEventListener("click", clearWordList);
     let skipBtn = document.getElementById("skip-word-btn"); if(skipBtn) skipBtn.addEventListener("click", skipToNextQueuedWord);
     let markAllBtn = document.getElementById("mark-all-correct"); if(markAllBtn) markAllBtn.addEventListener("click", markAllCorrect);
-    let finishBtn = document.getElementById("finish-round-btn"); if(finishBtn) finishBtn.addEventListener("click", finishRound);
     let undoRoundBtn = document.getElementById("undo-round-btn"); if(undoRoundBtn) undoRoundBtn.addEventListener("click", undoLastRound);
-    let revealBtn = document.getElementById("reveal-word-btn"); if(revealBtn) revealBtn.addEventListener("click", revealWord);
     let introBtn = document.getElementById("show-intro-btn"); if(introBtn) introBtn.addEventListener("click", showIntroScreen);
-    let advCatBtn = document.getElementById("advance-category-btn"); if(advCatBtn) advCatBtn.addEventListener("click", advanceFromCategoryScreen);
+    let continueBtn = document.getElementById("continue-flow-btn"); if(continueBtn) continueBtn.addEventListener("click", continueFlow);
 
     document.querySelectorAll("[data-timer-preset]").forEach(btn => { btn.addEventListener("click", (e) => { setTimerDuration(parseInt(e.target.dataset.timerPreset)); }); });
     document.getElementById("timer-set-custom").addEventListener("click", () => {
@@ -1303,6 +1332,7 @@
       <div class="topbar">
         <div class="brand"><div class="hex-mini"></div> Spelling Bee</div>
         <div class="round-pill">Round ${state.round}</div>
+        ${!isWinner ? `<button class="btn primary" id="continue-flow-btn" style="font-size:15px; padding:12px 22px;">${continueLabel()} <span style="opacity:0.7; font-weight:500; font-size:12px;">(Space)</span></button>` : ""}
         <div class="topbar-actions">
           <span class="sync-badge ${sync.cls}">${sync.text}</span>
           <button class="btn primary" id="open-projector">Open projector view ↗</button>
@@ -1322,7 +1352,6 @@
             <h3>Round results ${recap && recap.forgiven ? '<span class="sub" style="color:var(--honey-pale);">Both remaining teams missed — nobody eliminated, sudden death continues</span>' : ''}</h3>
             ${recapRows || `<div class="empty-note">Nothing to show.</div>`}
             <div style="margin-top:14px;">
-              <button class="btn primary" id="advance-results-btn">${state.pendingNextScreen === 'winner' ? 'Reveal the winner →' : 'Continue →'}</button>
               <button class="btn ghost btn-sm" id="undo-round-btn-2" ${state.lastSnapshot ? '' : 'disabled'}>Undo this round</button>
             </div>
           </div>
@@ -1339,7 +1368,7 @@
         render();
       }
     });
-    let advBtn = document.getElementById("advance-results-btn"); if(advBtn) advBtn.addEventListener("click", advanceFromResults);
+    let continueBtn2 = document.getElementById("continue-flow-btn"); if(continueBtn2) continueBtn2.addEventListener("click", continueFlow);
     let undoBtn2 = document.getElementById("undo-round-btn-2"); if(undoBtn2) undoBtn2.addEventListener("click", undoLastRound);
   }
 })();
