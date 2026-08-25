@@ -70,8 +70,9 @@
   .role-btn-stack .btn .label small{ display:block; font-weight:500; font-size:12px; color:var(--muted); margin-top:2px; }
 
   .stage{ flex:1; display:flex; flex-direction:column; padding: 30px 34px 42px; }
-  .word-banner{ text-align:center; margin: 6px auto 34px; max-width: 920px; width:100%; }
+  .word-banner{ text-align:center; margin: 6px auto 34px; max-width: 1300px; width:100%; }
   .category-tag{ display:inline-block; font-family: var(--ui); font-weight:800; font-size: clamp(20px, 2.6vw, 30px); color: var(--bg); background: var(--honey-pale); padding: 10px 28px; border-radius: 24px; letter-spacing:0.06em; margin-bottom: 16px; text-transform: uppercase; }
+  .category-progress{ font-family: var(--ui); font-weight:600; font-size: clamp(13px, 1.4vw, 16px); color: var(--muted); letter-spacing:0.04em; margin-bottom: 14px; }
   .word-banner .eyebrow{ font-size:13px; letter-spacing:0.2em; text-transform:uppercase; color: var(--honey); font-weight:700; margin-bottom:12px; }
   .word-display{ font-family: var(--display); font-size: clamp(40px, 7.5vw, 96px); color: var(--chalk); background: var(--panel); border: 2px solid var(--honey-deep); border-radius: 18px; padding: 24px 32px; letter-spacing: 0.02em; word-break: break-word; box-shadow: 0 0 0 7px rgba(234,174,63,0.07), 0 18px 40px -14px rgba(0,0,0,0.6); }
   .word-display.pop-in{ animation: wordPop 0.45s cubic-bezier(.22,.85,.32,1.35); }
@@ -315,6 +316,7 @@
   let lastWordAnimKey = null;
   let lastCategoryAnimKey = null;
   let lastWinnerAnimKey = null;
+  let lastResultsAnimKey = null;
 
   // ---------------- Role + state ----------------
   let myRole = null;
@@ -581,6 +583,24 @@
   function activeTeams(){ return state.teams.filter(t => !t.eliminated); }
   function teamScale(count){ if(count <= 6) return 1; if(count <= 10) return 0.85; if(count <= 14) return 0.72; return 0.6; }
   function cardMin(count){ if(count <= 6) return "250px"; if(count <= 10) return "205px"; if(count <= 14) return "175px"; return "150px"; }
+  function wordFontScale(word){
+    let len = (word || "").length;
+    if(len <= 8) return 1;
+    if(len <= 12) return 0.85;
+    if(len <= 16) return 0.72;
+    if(len <= 20) return 0.6;
+    return 0.5;
+  }
+  // "Word 3 of 5 in this category" — based on position within the loaded word list, not spoiling the word itself
+  function categoryProgressLabel(){
+    if(!state.category.trim() || !state.wordQueue || !state.wordQueue.length) return "";
+    let currentIdx = state.queueIndex - 1;
+    if(currentIdx < 0 || currentIdx >= state.wordQueue.length) return "";
+    let sameCategory = state.wordQueue.map((item, idx) => ({item, idx})).filter(x => (x.item.category || "").trim() === state.category.trim());
+    let pos = sameCategory.findIndex(x => x.idx === currentIdx) + 1;
+    if(pos <= 0) return "";
+    return `Word ${pos} of ${sameCategory.length} in this category`;
+  }
 
   // ---------------- Word list ----------------
   function parseWordList(text){
@@ -610,6 +630,48 @@
     }
   }
 
+  // ---------------- Sound effects (synthesized locally — no audio files, works offline) ----------------
+  let audioCtx = null;
+  function getAudioCtx(){
+    if(!audioCtx){ try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){ return null; } }
+    return audioCtx;
+  }
+  function isMuted(){ try{ return localStorage.getItem("beeSoundMuted") === "1"; }catch(e){ return false; } }
+  function setMuted(m){ try{ localStorage.setItem("beeSoundMuted", m ? "1" : "0"); }catch(e){} }
+  function toggleMute(){ setMuted(!isMuted()); render(); }
+  function ensureAudioUnlocked(){ let ctx = getAudioCtx(); if(ctx && ctx.state === "suspended"){ ctx.resume(); } }
+  function muteButtonHtml(){
+    let muted = isMuted();
+    return `<button class="btn ghost btn-sm" id="mute-toggle-btn" title="${muted ? 'Unmute sound effects' : 'Mute sound effects'}">${muted ? '🔇' : '🔊'}</button>`;
+  }
+  document.addEventListener("click", (e) => {
+    let btn = e.target.closest && e.target.closest("#mute-toggle-btn");
+    if(btn){ ensureAudioUnlocked(); toggleMute(); }
+  });
+
+  function playTone(freq, duration, type, gainStart, startDelay){
+    if(isMuted()) return;
+    let ctx = getAudioCtx();
+    if(!ctx) return;
+    if(ctx.state === "suspended"){ ctx.resume(); }
+    let t0 = ctx.currentTime + (startDelay || 0);
+    let osc = ctx.createOscillator();
+    let gain = ctx.createGain();
+    osc.type = type || "sine";
+    osc.frequency.setValueAtTime(freq, t0);
+    gain.gain.setValueAtTime(gainStart || 0.2, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + duration + 0.02);
+  }
+  function playCategorySound(){ playTone(440, 0.4, "sine", 0.15); playTone(660, 0.5, "sine", 0.12, 0.08); }
+  function playStrikeSound(){ playTone(340, 0.18, "sine", 0.16); playTone(240, 0.24, "sine", 0.14, 0.12); }
+  function playCorrectSound(){ playTone(660, 0.12, "sine", 0.2); playTone(880, 0.18, "sine", 0.2, 0.1); }
+  function playEliminationSound(){ playTone(160, 0.45, "sawtooth", 0.28); playTone(110, 0.55, "sawtooth", 0.24, 0.16); }
+  function playWinnerSound(){ [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => playTone(f, 0.35, "triangle", 0.22, i * 0.14)); }
+  function playTimesUpSound(){ playTone(220, 0.5, "square", 0.2); playTone(220, 0.5, "square", 0.2, 0.25); }
+
   // ---------------- Timer (host-controlled, ticks locally so it doesn't need a network write every second) ----------------
   function computeTimerRemaining(){
     if(!state.timer) return 0;
@@ -624,12 +686,14 @@
   function setTimerDuration(seconds){
     seconds = Math.max(5, Math.min(600, Math.round(seconds)));
     state.timer = { duration: seconds, remaining: seconds, endsAt: null };
+    timerZeroSounded = false;
     saveGameConfig(); render();
   }
   function startTimer(){
     if(!state.timer || state.timer.endsAt) return;
     let remaining = state.timer.remaining > 0 ? state.timer.remaining : state.timer.duration;
     state.timer.endsAt = Date.now() + remaining * 1000;
+    timerZeroSounded = false;
     saveGameConfig(); render();
   }
   function pauseTimer(){
@@ -642,15 +706,20 @@
     if(!state.timer) return;
     state.timer.remaining = state.timer.duration;
     state.timer.endsAt = null;
+    timerZeroSounded = false;
     saveGameConfig(); render();
   }
+  let timerZeroSounded = false;
   function tickTimerDisplay(){
     let el = document.getElementById("timer-display");
-    if(!el) return;
     let remaining = computeTimerRemaining();
-    el.textContent = formatTime(remaining);
-    el.classList.toggle("timer-critical", remaining > 0 && remaining <= 5);
-    el.classList.toggle("timer-done", remaining <= 0 && !!(state.timer && state.timer.endsAt));
+    let running = !!(state.timer && state.timer.endsAt);
+    if(el){
+      el.textContent = formatTime(remaining);
+      el.classList.toggle("timer-critical", remaining > 0 && remaining <= 5);
+      el.classList.toggle("timer-done", remaining <= 0 && running);
+    }
+    if(running && remaining <= 0 && !timerZeroSounded){ timerZeroSounded = true; playTimesUpSound(); }
   }
   setInterval(tickTimerDisplay, 250);
 
@@ -701,6 +770,7 @@
   // Strikes land immediately (for the live "STRIKE!" flash) but eliminations are NOT
   // finalized here — that only happens once the whole round is done, in finishRound().
   function hostSetResult(teamId, value){
+    if(state.screen !== "word") return;
     let t = state.teams.find(x => x.id === teamId);
     if(!t) return;
     let prev = state.roundResults[teamId];
@@ -750,7 +820,7 @@
     } finally { pollInFlight = false; }
   }
 
-  function markAllCorrect(){ activeTeams().forEach(t => { hostSetResult(t.id, "correct"); }); }
+  function markAllCorrect(){ if(state.screen !== "word") return; activeTeams().forEach(t => { hostSetResult(t.id, "correct"); }); }
   function allActiveMarked(){ let active = activeTeams(); if(active.length === 0) return false; return active.every(t => state.roundResults[t.id]); }
 
   // Finalize the round: apply eliminations (with the "both remaining teams busted" forgiveness
@@ -885,6 +955,7 @@
       setTimeout(() => { flash.remove(); }, duration);
       setTimeout(() => { let el = document.querySelector(`.team-card[data-team-id="${ev.teamId}"]`); if(el) el.classList.remove("strike-hit"); }, 650);
       lastSeenStrikeEventId = ev.id;
+      playStrikeSound();
     }
     if(isNewCorrect){
       let ev = state.correctEvent;
@@ -895,6 +966,7 @@
       setTimeout(() => { toast.remove(); }, 1450);
       setTimeout(() => { let el = document.querySelector(`.team-card[data-team-id="${ev.teamId}"]`); if(el) el.classList.remove("correct-hit"); }, 850);
       lastSeenCorrectEventId = ev.id;
+      playCorrectSound();
     }
   }
 
@@ -935,7 +1007,7 @@
       let isNewWinnerAnim = winAnimKey !== lastWinnerAnimKey;
       lastWinnerAnimKey = winAnimKey;
       app.innerHTML = `
-        <div class="topbar"><div class="brand"><div class="hex-mini"></div> Spelling Bee</div></div>
+        <div class="topbar"><div class="brand"><div class="hex-mini"></div> Spelling Bee</div>${muteButtonHtml()}</div>
         <div class="winner-screen">
           ${confettiPieces()}
           <div class="eyebrow">Spelling Bee Champion</div>
@@ -945,12 +1017,16 @@
         </div>
       `;
       triggerFlashes(isNewStrike, isNewCorrect);
+      if(isNewWinnerAnim) playWinnerSound();
       return;
     }
 
     if(state.screen === "results"){
       let recap = state.roundRecap;
       let entries = recap ? recap.entries : [];
+      let resultsAnimKey = state.round + "::results";
+      let isNewResultsAnim = resultsAnimKey !== lastResultsAnimKey;
+      lastResultsAnimKey = resultsAnimKey;
       let cards = entries.map((e, i) => {
         let team = state.teams.find(t => t.id === e.teamId);
         let strikes = team ? team.strikes : 0;
@@ -965,7 +1041,7 @@
         `;
       }).join("");
       app.innerHTML = `
-        <div class="topbar"><div class="brand"><div class="hex-mini"></div> Spelling Bee</div></div>
+        <div class="topbar"><div class="brand"><div class="hex-mini"></div> Spelling Bee</div>${muteButtonHtml()}</div>
         <div class="results-screen">
           <div class="results-heading">
             <div class="eyebrow">Round Results</div>
@@ -975,6 +1051,7 @@
           <div class="recap-grid">${cards || `<div class="empty-note">No results to show.</div>`}</div>
         </div>
       `;
+      if(isNewResultsAnim && entries.some(e => e.eliminated)) playEliminationSound();
       return;
     }
 
@@ -992,6 +1069,7 @@
         <div class="topbar">
           <div class="brand"><div class="hex-mini"></div> Spelling Bee</div>
           <div class="topbar-mid"><div class="round-pill">Round ${state.round}</div>${timerPillHtml()}</div>
+          ${muteButtonHtml()}
         </div>
         <div class="category-screen">
           <div class="eyebrow">New Category</div>
@@ -1000,6 +1078,7 @@
         </div>
       `;
       triggerFlashes(isNewStrike, isNewCorrect);
+      if(isNewCategoryAnim) playCategorySound();
       return;
     }
 
@@ -1008,10 +1087,12 @@
         <div class="topbar">
           <div class="brand"><div class="hex-mini"></div> Spelling Bee</div>
           <div class="topbar-mid"><div class="round-pill">Round ${state.round}</div>${timerPillHtml()}</div>
+          ${muteButtonHtml()}
         </div>
         <div class="stage">
           <div class="word-banner">
             ${state.category.trim() ? `<div class="category-tag">${escapeHtml(state.category)}</div>` : ""}
+            ${categoryProgressLabel() ? `<div class="category-progress">${categoryProgressLabel()}</div>` : ""}
             <div class="eyebrow" style="margin-top: ${state.category.trim() ? '4px' : '0'};">Who's up next</div>
           </div>
           <div class="teams-grid" style="--card-min:${minWidth};">${cardsHtml || `<div class="empty-note">No teams remaining.</div>`}</div>
@@ -1028,6 +1109,8 @@
     let active = activeTeams();
     let markedCount = active.filter(t => state.roundResults[t.id]).length;
     let showProgress = state.word.trim() && active.length > 0;
+    let wordScale = wordFontScale(state.word);
+    let catProgress = categoryProgressLabel();
 
     app.innerHTML = `
       <div class="topbar">
@@ -1037,12 +1120,14 @@
           ${timerPillHtml()}
           ${showProgress ? `<div class="progress-mini"><div class="plabel">${markedCount} of ${active.length} results in</div><div class="progress-wrap"><div class="progress-fill" style="width:${active.length ? (markedCount/active.length*100) : 0}%"></div></div></div>` : ""}
         </div>
+        ${muteButtonHtml()}
       </div>
       <div class="stage">
         <div class="word-banner">
           ${state.category.trim() ? `<div class="category-tag">${escapeHtml(state.category)}</div><br/>` : ""}
+          ${catProgress ? `<div class="category-progress">${catProgress}</div>` : ""}
           <div class="eyebrow">Current word</div>
-          ${state.word.trim() ? `<div class="word-display ${isNewWord ? 'pop-in' : ''}">${escapeHtml(state.word)}</div>` : `<div class="word-display placeholder">Waiting for the next word…</div>`}
+          ${state.word.trim() ? `<div class="word-display ${isNewWord ? 'pop-in' : ''}" style="font-size: calc(clamp(40px, 7.5vw, 96px) * ${wordScale});">${escapeHtml(state.word)}</div>` : `<div class="word-display placeholder">Waiting for the next word…</div>`}
         </div>
         <div class="teams-grid" style="--card-min:${minWidth};">${cardsHtml || `<div class="empty-note">No teams remaining.</div>`}</div>
       </div>
@@ -1156,15 +1241,17 @@
       return;
     }
 
+    let canMark = state.screen === "word";
     let roundRows = state.teams.map((t, i) => {
       let result = state.roundResults[t.id];
       let accent = cardAccent(t, i);
+      let disabled = t.eliminated || !canMark;
       return `
         <div class="round-team-row ${t.eliminated ? 'eliminated':''}" style="--accent:${accent};">
           <div class="name-block"><div class="tname">${escapeHtml(t.name)}</div><div class="current">Spelling: ${escapeHtml(currentSpeller(t))}${t.eliminated ? ' — eliminated' : ''}</div></div>
           <div class="round-toggle">
-            <button class="btn btn-sm safe ${result==='correct' ? 'active':''}" data-round-action="correct" data-id="${t.id}" ${t.eliminated?'disabled':''}>Correct</button>
-            <button class="btn btn-sm danger ${result==='incorrect' ? 'active danger-active':''}" data-round-action="incorrect" data-id="${t.id}" ${t.eliminated?'disabled':''}>Incorrect</button>
+            <button class="btn btn-sm safe ${result==='correct' ? 'active':''}" data-round-action="correct" data-id="${t.id}" ${disabled?'disabled':''}>Correct</button>
+            <button class="btn btn-sm danger ${result==='incorrect' ? 'active danger-active':''}" data-round-action="incorrect" data-id="${t.id}" ${disabled?'disabled':''}>Incorrect</button>
           </div>
         </div>
       `;
@@ -1196,6 +1283,7 @@
         <button class="btn primary" id="continue-flow-btn" ${continueDisabled() ? 'disabled' : ''} style="font-size:15px; padding:12px 22px;">${continueLabel()} <span style="opacity:0.7; font-weight:500; font-size:12px;">(Space)</span></button>
         <div class="topbar-actions">
           <span class="sync-badge ${sync.cls}">${sync.text}</span>
+          ${muteButtonHtml()}
           <button class="btn primary" id="open-projector">Open projector view ↗</button>
           <button class="btn" id="open-judge">Open a judge tab ↗</button>
           <button class="btn ghost" id="restart-btn">Restart</button>
@@ -1260,10 +1348,11 @@
             <div class="progress-mini" style="margin-bottom:14px;"><div class="plabel">${markedCount} of ${active.length} results in</div><div class="progress-wrap"><div class="progress-fill" style="width:${active.length ? (markedCount/active.length*100) : 0}%"></div></div></div>
             ${roundRows}
             <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
-              <button class="btn ghost btn-sm" id="mark-all-correct">Mark remaining as correct</button>
+              <button class="btn ghost btn-sm" id="mark-all-correct" ${canMark ? '' : 'disabled'}>Mark remaining as correct</button>
               <button class="btn ghost btn-sm" id="undo-round-btn" ${state.lastSnapshot ? '' : 'disabled'}>Undo last round</button>
             </div>
-            ${!allActiveMarked() ? `<div class="hint" style="margin-top:8px;">Judges' results appear here automatically — or mark a team yourself. Once everyone's marked, hit Continue up top (or Space) to finish the round. Nobody is actually eliminated until then — if the last two teams both miss, neither is out.</div>` : `<div class="hint" style="margin-top:8px;">Everyone's marked — hit Continue up top (or Space) to finish the round. This won't show a winner yet even if only one team would be left — you'll see a results recap first.</div>`}
+            ${!canMark ? `<div class="hint" style="margin-top:8px; color:var(--honey-pale);">Results can't be marked until the word is revealed on the projector — hit Continue up top (or Space) to get there.</div>`
+              : !allActiveMarked() ? `<div class="hint" style="margin-top:8px;">Judges' results appear here automatically — or mark a team yourself. Once everyone's marked, hit Continue up top (or Space) to finish the round. Nobody is actually eliminated until then — if the last two teams both miss, neither is out.</div>` : `<div class="hint" style="margin-top:8px;">Everyone's marked — hit Continue up top (or Space) to finish the round. This won't show a winner yet even if only one team would be left — you'll see a results recap first.</div>`}
           `}
         </div>
 
@@ -1335,6 +1424,7 @@
         ${!isWinner ? `<button class="btn primary" id="continue-flow-btn" style="font-size:15px; padding:12px 22px;">${continueLabel()} <span style="opacity:0.7; font-weight:500; font-size:12px;">(Space)</span></button>` : ""}
         <div class="topbar-actions">
           <span class="sync-badge ${sync.cls}">${sync.text}</span>
+          ${muteButtonHtml()}
           <button class="btn primary" id="open-projector">Open projector view ↗</button>
           <button class="btn" id="open-judge">Open a judge tab ↗</button>
           <button class="btn ghost" id="restart-btn">Restart</button>
