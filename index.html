@@ -597,8 +597,8 @@
   // ---------------- Shared helpers ----------------
   function currentSpeller(team){ if(team.members.length === 0) return ""; return team.members[team.turn % team.members.length]; }
   function activeTeams(){ return state.teams.filter(t => !t.eliminated); }
-  function teamScale(count){ if(count <= 4) return 1; if(count <= 8) return 0.9; if(count <= 12) return 0.72; if(count <= 16) return 0.6; return 0.5; }
-  function cardMin(count){ if(count <= 4) return "300px"; if(count <= 8) return "260px"; if(count <= 12) return "200px"; if(count <= 16) return "170px"; return "145px"; }
+  function teamScale(count){ if(count <= 4) return 1; if(count <= 8) return 0.95; if(count <= 12) return 0.72; if(count <= 16) return 0.6; return 0.5; }
+  function cardMin(count){ if(count <= 4) return "340px"; if(count <= 8) return "400px"; if(count <= 12) return "230px"; if(count <= 16) return "180px"; return "150px"; }
   function wordFontScale(word){
     let len = (word || "").length;
     if(len <= 8) return 1;
