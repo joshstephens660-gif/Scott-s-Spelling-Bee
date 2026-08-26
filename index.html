@@ -597,8 +597,8 @@
   // ---------------- Shared helpers ----------------
   function currentSpeller(team){ if(team.members.length === 0) return ""; return team.members[team.turn % team.members.length]; }
   function activeTeams(){ return state.teams.filter(t => !t.eliminated); }
-  function teamScale(count){ if(count <= 6) return 1; if(count <= 10) return 0.85; if(count <= 14) return 0.72; return 0.6; }
-  function cardMin(count){ if(count <= 6) return "250px"; if(count <= 10) return "205px"; if(count <= 14) return "175px"; return "150px"; }
+  function teamScale(count){ if(count <= 4) return 1; if(count <= 8) return 0.9; if(count <= 12) return 0.72; if(count <= 16) return 0.6; return 0.5; }
+  function cardMin(count){ if(count <= 4) return "300px"; if(count <= 8) return "260px"; if(count <= 12) return "200px"; if(count <= 16) return "170px"; return "145px"; }
   function wordFontScale(word){
     let len = (word || "").length;
     if(len <= 8) return 1;
@@ -1030,7 +1030,7 @@
         "This screen will show the word you need to spell — it'll be read out twice, with no definition given.",
         "Spellers go one at a time and rotate through your team each round. The screen shows whose turn it is.",
         "The speller comes forward from their team's line, sits down, and writes their spelling of the word on paper.",
-        `You'll have ${timerSecs} seconds to spell each word.`,
+        `You'll have around ${timerSecs} seconds to spell each word.`,
         "A judge assigned to your team checks whether the word was spelled correctly.",
         "At the end of each round, check the screen for the correct spelling and how your team did.",
         `A wrong word means a strike. ${state.strikeLimit} strikes and your team is eliminated.`,
