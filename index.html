@@ -358,7 +358,8 @@
     roundRecap: null,      // { entries: [{teamId,teamName,result,eliminated}], forgiven }
     pendingNextScreen: null,
     winnerTeamId: null,
-    timer: { duration: 30, remaining: 30, endsAt: null }
+    timer: { duration: 30, remaining: 30, endsAt: null },
+    gridColumns: "auto"    // 'auto' or a number — manual override for the projector's team grid layout
   };
 
   let setupDraft = {
@@ -566,6 +567,7 @@
     state.lastSnapshot = null; state.strikeEvent = null; state.correctEvent = null;
     state.screen = "welcome"; state.roundRecap = null; state.pendingNextScreen = null; state.winnerTeamId = null;
     state.timer = { duration: 30, remaining: 30, endsAt: null };
+    state.gridColumns = "auto";
     state.mode = "host";
     saveGameConfig(); render();
   }
@@ -590,6 +592,7 @@
     state.lastSnapshot = null; state.strikeEvent = null; state.correctEvent = null;
     state.screen = "welcome"; state.roundRecap = null; state.pendingNextScreen = null; state.winnerTeamId = null;
     state.timer = { duration: 30, remaining: 30, endsAt: null };
+    state.gridColumns = "auto";
     state.mode = "host";
     saveGameConfig(); render();
   }
@@ -599,6 +602,14 @@
   function activeTeams(){ return state.teams.filter(t => !t.eliminated); }
   function teamScale(count){ if(count <= 4) return 1; if(count <= 8) return 0.95; if(count <= 12) return 0.72; if(count <= 16) return 0.6; return 0.5; }
   function cardMin(count){ if(count <= 4) return "340px"; if(count <= 8) return "400px"; if(count <= 12) return "230px"; if(count <= 16) return "180px"; return "150px"; }
+  function setGridColumns(val){
+    state.gridColumns = val;
+    saveGameConfig(); render();
+  }
+  function teamsGridStyle(minWidth){
+    if(state.gridColumns && state.gridColumns !== "auto"){ return `grid-template-columns: repeat(${state.gridColumns}, 1fr);`; }
+    return `--card-min:${minWidth};`;
+  }
   function wordFontScale(word){
     let len = (word || "").length;
     if(len <= 8) return 1;
@@ -1150,7 +1161,7 @@
             ${categoryProgressLabel() ? `<div class="category-progress">${categoryProgressLabel()}</div>` : ""}
             <div class="eyebrow" style="margin-top: ${state.category.trim() ? '4px' : '0'};">Who's up next</div>
           </div>
-          <div class="teams-grid" style="--card-min:${minWidth};">${cardsHtml || `<div class="empty-note">No teams remaining.</div>`}</div>
+          <div class="teams-grid" style="${teamsGridStyle(minWidth)}">${cardsHtml || `<div class="empty-note">No teams remaining.</div>`}</div>
         </div>
       `;
       triggerFlashes(isNewStrike, isNewCorrect);
@@ -1184,7 +1195,7 @@
           <div class="eyebrow">Current word</div>
           ${state.word.trim() ? `<div class="word-display ${isNewWord ? 'pop-in' : ''}" style="font-size: calc(clamp(48px, 9vw, 128px) * ${wordScale});">${escapeHtml(state.word)}</div>` : `<div class="word-display placeholder">Waiting for the next word…</div>`}
         </div>
-        <div class="teams-grid" style="--card-min:${minWidth};">${cardsHtml || `<div class="empty-note">No teams remaining.</div>`}</div>
+        <div class="teams-grid" style="${teamsGridStyle(minWidth)}">${cardsHtml || `<div class="empty-note">No teams remaining.</div>`}</div>
       </div>
     `;
     triggerFlashes(isNewStrike, isNewCorrect);
@@ -1412,6 +1423,19 @@
         </div>
 
         <div class="host-section"><h3><div class="hex-badge">3</div> Teams &amp; scores <span class="sub">manual corrections</span></h3><div class="teams-score-list">${scoreRows}</div></div>
+
+        <div class="host-section">
+          <h3>🔲 Projector grid layout <span class="sub">not sure how it'll look on the day? try a few live on the actual screen</span></h3>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn btn-sm ${state.gridColumns==='auto'?'active':''}" data-grid-cols="auto">Auto</button>
+            <button class="btn btn-sm ${state.gridColumns===2?'active':''}" data-grid-cols="2">2 columns</button>
+            <button class="btn btn-sm ${state.gridColumns===3?'active':''}" data-grid-cols="3">3 columns</button>
+            <button class="btn btn-sm ${state.gridColumns===4?'active':''}" data-grid-cols="4">4 columns</button>
+            <button class="btn btn-sm ${state.gridColumns===5?'active':''}" data-grid-cols="5">5 columns</button>
+            <button class="btn btn-sm ${state.gridColumns===6?'active':''}" data-grid-cols="6">6 columns</button>
+          </div>
+          <div class="hint" style="margin-top:8px;">"Auto" fits as many as look reasonable for your screen automatically. Pick a fixed number if Auto doesn't look right on your projector — this updates the projector live, so you can watch it change.</div>
+        </div>
       </div>
     `;
 
@@ -1420,7 +1444,7 @@
     document.getElementById("restart-btn").addEventListener("click", async () => {
       if(confirm("Restart and clear the current teams and scores?")){
         await sharedDelete("gameConfig");
-        state = { mode: "setup", strikeLimit: 3, teams: [], round: 1, word: "", category: "", wordQueue: [], queueIndex: 0, roundResults: {}, lastSnapshot: null, strikeEvent: null, correctEvent: null, screen: "welcome", roundRecap: null, pendingNextScreen: null, winnerTeamId: null, timer: { duration: 30, remaining: 30, endsAt: null } };
+        state = { mode: "setup", strikeLimit: 3, teams: [], round: 1, word: "", category: "", wordQueue: [], queueIndex: 0, roundResults: {}, lastSnapshot: null, strikeEvent: null, correctEvent: null, screen: "welcome", roundRecap: null, pendingNextScreen: null, winnerTeamId: null, timer: { duration: 30, remaining: 30, endsAt: null }, gridColumns: "auto" };
         render();
       }
     });
@@ -1443,6 +1467,13 @@
     document.getElementById("timer-start").addEventListener("click", startTimer);
     document.getElementById("timer-pause").addEventListener("click", pauseTimer);
     document.getElementById("timer-reset").addEventListener("click", resetTimer);
+
+    document.querySelectorAll("[data-grid-cols]").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        let v = e.target.dataset.gridCols;
+        setGridColumns(v === "auto" ? "auto" : parseInt(v));
+      });
+    });
 
     document.querySelectorAll("[data-round-action]").forEach(btn => { btn.addEventListener("click", (e) => { hostSetResult(e.target.dataset.id, e.target.dataset.roundAction); }); });
     document.querySelectorAll("[data-score-action]").forEach(btn => {
@@ -1509,7 +1540,7 @@
     document.getElementById("restart-btn").addEventListener("click", async () => {
       if(confirm("Restart and clear the current teams and scores?")){
         await sharedDelete("gameConfig");
-        state = { mode: "setup", strikeLimit: 3, teams: [], round: 1, word: "", category: "", wordQueue: [], queueIndex: 0, roundResults: {}, lastSnapshot: null, strikeEvent: null, correctEvent: null, screen: "welcome", roundRecap: null, pendingNextScreen: null, winnerTeamId: null, timer: { duration: 30, remaining: 30, endsAt: null } };
+        state = { mode: "setup", strikeLimit: 3, teams: [], round: 1, word: "", category: "", wordQueue: [], queueIndex: 0, roundResults: {}, lastSnapshot: null, strikeEvent: null, correctEvent: null, screen: "welcome", roundRecap: null, pendingNextScreen: null, winnerTeamId: null, timer: { duration: 30, remaining: 30, endsAt: null }, gridColumns: "auto" };
         render();
       }
     });
